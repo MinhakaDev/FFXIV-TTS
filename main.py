@@ -8,7 +8,7 @@ import time
 
 with open('./settings.json', 'r', encoding='utf-8') as f:
     settings = json.load(f)
-if settings['region'] == "US":
+if settings['region'] == "a":
     femaleVoice = 'af_heart'
     maleVoice = 'am_adam'
 else:
@@ -17,6 +17,7 @@ else:
 voiceSpeed = settings['speed']
 femaleVoiceVolume = settings['femalevolume']
 maleVoiceVolume = settings['malevolume']
+print(f"\n\nUsing Male Voice: {maleVoice} and Female voice: {femaleVoice}\n\n")
 
 
 
@@ -105,7 +106,10 @@ def on_message(ws, message):
 def on_error(ws, error):
     error_str = str(error)
     if "10061" in error_str:
-        print("You didn't open FFXiv")
+        print("You didn't open FFXIV Launcher")
+        for i in range(5):
+            print(f"sleaping in {5-i}")
+            i+=1
     elif "10053" in error_str:
         print("Error in Processing Request Reconecting ...")
         connect()
