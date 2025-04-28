@@ -81,8 +81,11 @@ def ChangeSpeed():
         with open('./settings.json', 'r', encoding='utf-8') as f:
             settings = json.load(f)
 
-        print("Select your speed like (1.2 , 1.0,  0.7).")
+        print("Select your speed like (1.2 , 1.0,  0.7): ")
+        
         speed = float(input())
+
+        
 
         settings['speed'] = speed
 
@@ -96,10 +99,13 @@ def ChangeSpeed():
         with open('./settings.json', 'r', encoding='utf-8') as f:
             settings = json.load(f)
 
-        print("Select your speed ")
-        volume = int(input())
+        print("Select your male voice volume: ")
+        malevolume = int(input())
+        print("Select your female voice volume: ")
+        femalevolume = int(input())
 
-        settings['volume'] = volume
+        settings['malevolume'] = malevolume
+        settings['femalevolume'] = femalevolume
 
         with open('settings.json', 'w', encoding='utf-8') as f:
             json.dump(settings, f, indent=4)

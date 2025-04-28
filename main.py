@@ -15,7 +15,8 @@ else:
     femaleVoice = 'bf_emma'
     maleVoice = 'bm_george'
 voiceSpeed = settings['speed']
-voiceVolume = settings['volume']
+femaleVoiceVolume = settings['femalevolume']
+maleVoiceVolume = settings['malevolume']
 
 
 
@@ -93,8 +94,10 @@ def on_message(ws, message):
             # Stream the audio using sounddevice
             for i, (gs, ps, audio) in enumerate(generator):
                 print(f"Streaming audio segment {i + 1}...")
-                adjusted_audio = audio * voiceVolume
-                sd.play(audio, samplerate=24000)
+                adjusted_audio = audio * maleVoiceVolume
+                if voice == femaleVoice:
+                    adjusted_audio = audio * femaleVoiceVolume
+                sd.play(adjusted_audio, samplerate=24000)
 
     except Exception as e:
         print(f"Error parsing or processing message: {e}")
