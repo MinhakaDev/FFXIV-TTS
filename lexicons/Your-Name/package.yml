@@ -1,0 +1,6 @@
+name: Ingame Name Pronunciation
+author: Minhaka
+disabled: false
+description: Adding Pronunciation to your ingame Name
+files:
+  - lexicon.pls

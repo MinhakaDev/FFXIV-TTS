@@ -3,11 +3,6 @@
     xsi:schemaLocation="http://www.w3.org/2005/01/pronunciation-lexicon http://www.w3.org/TR/2007/CR-pronunciation-lexicon-20071212/pls.xsd"
     alphabet="ipa" xml:lang="en" xmlns="http://www.w3.org/2005/01/pronunciation-lexicon">
     <lexeme>
-        <grapheme>minhaka</grapheme>
-        <grapheme>Minhaka</grapheme>
-        <phoneme>miˈɲaka</phoneme>
-    </lexeme>
-    <lexeme>
         <grapheme>'s</grapheme>
         <phoneme>z</phoneme>
     </lexeme>

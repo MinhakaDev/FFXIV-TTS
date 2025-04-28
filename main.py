@@ -6,6 +6,19 @@ import sounddevice as sd
 import xml.etree.ElementTree as ET
 import time
 
+with open('./settings.json', 'r', encoding='utf-8') as f:
+    settings = json.load(f)
+if settings['region'] == "US":
+    femaleVoice = 'af_heart'
+    maleVoice = 'am_adam'
+else:
+    femaleVoice = 'bf_emma'
+    maleVoice = 'bm_george'
+voiceSpeed = settings['speed']
+voiceVolume = settings['volume']
+
+
+
 def parse_pls(filename):
     lexicon = {}
     try:
@@ -33,6 +46,7 @@ pls_directories = [
     './lexicons/Characters-Locations-System',
     './lexicons/Chat-FFXIV-Acronyms',
     './lexicons/Stutter-Replacers'
+    './lexicons/Your-Name'
 ]
 
 
@@ -69,16 +83,17 @@ def on_message(ws, message):
             print("Voice:", voice_type or "Unknown")
 
             # Pick voice
-            voice = 'bm_daniel'  # Default male
+            voice = maleVoice
             if voice_type == 'female':
-                voice = 'bf_emma'
+                voice = femaleVoice
 
             # Generate audio using Kokoro
-            generator = pipeline(payload, voice=voice, speed=1)
+            generator = pipeline(payload, voice=voice, speed=voiceSpeed)
 
             # Stream the audio using sounddevice
             for i, (gs, ps, audio) in enumerate(generator):
                 print(f"Streaming audio segment {i + 1}...")
+                adjusted_audio = audio * voiceVolume
                 sd.play(audio, samplerate=24000)
 
     except Exception as e:
