@@ -13,13 +13,13 @@ if settings['region'] == "a":
     maleVoice = 'am_adam'
 else:
     femaleVoice = 'bf_emma'
-    maleVoice = 'bm_george'
+    maleVoice = 'bm_daniel'
 voiceSpeed = settings['speed']
 femaleVoiceVolume = settings['femalevolume']
 maleVoiceVolume = settings['malevolume']
 print(f"\n\nUsing Male Voice: {maleVoice} and Female voice: {femaleVoice}\n\n")
 
-
+aliases_dict = {}
 
 def parse_pls(filename):
     lexicon = {}
@@ -32,23 +32,51 @@ def parse_pls(filename):
             graphemes = [
                 grapheme.text.strip()
                 for grapheme in lexeme.findall('{http://www.w3.org/2005/01/pronunciation-lexicon}grapheme')
+                if grapheme.text is not None
             ]
-            phoneme = lexeme.find('{http://www.w3.org/2005/01/pronunciation-lexicon}phoneme').text.strip()
             
-            # Add entries to the lexicon
+            phoneme_element = lexeme.find('{http://www.w3.org/2005/01/pronunciation-lexicon}phoneme')
+            phoneme = phoneme_element.text.strip() if phoneme_element is not None and phoneme_element.text else None
+            
+            alias_element = lexeme.find('{http://www.w3.org/2005/01/pronunciation-lexicon}alias')
+            alias = alias_element.text.strip() if alias_element is not None and alias_element.text else None
+            
+            # Add entries to the lexicon and aliases_dict
             for grapheme in graphemes:
-                lexicon[grapheme] = phoneme
+                if phoneme:  # Only add to lexicon if phoneme exists
+                    lexicon[grapheme] = phoneme
+                if alias:  # Only add to aliases_dict if alias exists
+                    aliases_dict[grapheme] = alias
     except Exception as e:
         print(f"Error parsing PLS file {filename}: {e}")
+    
     return lexicon
+
+
+def transform_string(input_string, aliases_dict):
+    # Split the string into words
+    words = input_string.split()
+    
+    # Transform words that match a grapheme in aliases_dict
+    transformed_words = [
+        aliases_dict[word] if word in aliases_dict else word
+        for word in words
+    ]
+    
+    # Join the words back into a string
+    transformed_string = ' '.join(transformed_words)
+    
+    return transformed_string
+
+
 
 
 # Directories containing PLS files
 pls_directories = [
     './lexicons/Characters-Locations-System',
-    './lexicons/Chat-FFXIV-Acronyms',
-    './lexicons/Stutter-Replacers'
-    './lexicons/Your-Name'
+    './lexicons/Your-Name',
+    './lexicons/Stutter-Replacers',
+    './lexicons/Chat-FFXIV-Acronyms'
 ]
 
 
@@ -78,8 +106,13 @@ def on_message(ws, message):
             sd.stop()
 
         if data.get('Type') == 'Say':
-            payload = data.get('Payload', '')
+            text = data.get('Payload', '')
             voice_type = data.get('Voice', {}).get('Name', '').lower()
+
+
+            payload = transform_string(text, aliases_dict)
+
+
 
             print("Say Payload:", payload)
             print("Voice:", voice_type or "Unknown")
@@ -91,7 +124,7 @@ def on_message(ws, message):
 
             # Generate audio using Kokoro
             generator = pipeline(payload, voice=voice, speed=voiceSpeed)
-
+            print(f"with voice {voice}")
             # Stream the audio using sounddevice
             for i, (gs, ps, audio) in enumerate(generator):
                 print(f"Streaming audio segment {i + 1}...")

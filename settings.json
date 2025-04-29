@@ -1,6 +1,6 @@
 {
     "region": "b",
     "speed": 1.0,
-    "femalevolume": 1.0,
-    "malevolume": 1.0
+    "femalevolume": 0.8,
+    "malevolume": 0.9
 }

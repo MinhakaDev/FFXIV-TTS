@@ -9,12 +9,16 @@ def __main__():
     choice = int(input())
     if choice == 1:
         ChangeName()
+        return True
     elif choice == 2:
          ChangeRegion()
+         return True
     elif choice == 3:
          ChangeSpeed()
+         return True
     elif choice == 4:
-         ChangeSpeed()
+         ChangeVolume()
+         return True
     elif choice == 0:
          return False
     return True
@@ -94,15 +98,15 @@ def ChangeSpeed():
 
         print(f"Speed set to {settings['speed']} successfully!")
 
-def ChangeSpeed():
+def ChangeVolume():
 
         with open('./settings.json', 'r', encoding='utf-8') as f:
             settings = json.load(f)
-
+        print("Select your voice volume like (1.2 , 1.0,  0.7): \n")
         print("Select your male voice volume: ")
-        malevolume = int(input())
+        malevolume = float(input())
         print("Select your female voice volume: ")
-        femalevolume = int(input())
+        femalevolume = float(input())
 
         settings['malevolume'] = malevolume
         settings['femalevolume'] = femalevolume
@@ -110,7 +114,7 @@ def ChangeSpeed():
         with open('settings.json', 'w', encoding='utf-8') as f:
             json.dump(settings, f, indent=4)
 
-        print(f"Volume set to {settings['volume']} successfully!")
+        print(f"male voice is {settings['malevolume']}\n and female is {settings['femalevolume']}\n✅✅✅\n")
 
 
 isRunning = True
