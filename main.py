@@ -8,12 +8,14 @@ import time
 
 with open('./settings.json', 'r', encoding='utf-8') as f:
     settings = json.load(f)
-if settings['region'] == "a":
+if settings['region'] == "US":
+    reagionVoice = "a"
     femaleVoice = 'af_heart'
-    maleVoice = 'am_adam'
+    maleVoice = 'am_puck'
 else:
+    reagionVoice = "b"
     femaleVoice = 'bf_emma'
-    maleVoice = 'bm_daniel'
+    maleVoice = 'bm_fable'
 voiceSpeed = settings['speed']
 femaleVoiceVolume = settings['femalevolume']
 maleVoiceVolume = settings['malevolume']
@@ -68,7 +70,71 @@ def transform_string(input_string, aliases_dict):
     
     return transformed_string
 
+def getVoice(person,currentVoice):
+    if person == "alphinaud":
+        return "bm_fable"
+    
+    elif person == "alisaie":
+        return "bf_emma"
+    
+    elif person == "wuk lamat":
+        return "bm_daniel"
+    
+    elif person == "y'shtola":
+        return "bf_alice"
+    
+    elif person == "g'raha tia":
+        return "bf_isabella"
+    
+    elif person == "thancred":
+        return "bm_fable"
+    
+    elif person == "krile":
+        return "bf_lily"
+    
+    elif person == "urianger":
+        return "bm_lewis"
+    
+    elif person == "lyse":
+        return "af_heart"
+    
+    elif person == "erenville":
+        return "am_fenrir"
+    
+    elif person == "estinien":
+        return "af_bella"
+    
+    elif person == "minfilia":
+        return "f_heart"
+    
 
+
+    elif person == "zero":
+        return "am_puck"
+    
+    elif person == "emet-selch":
+        return ""
+    
+    elif person == "raubahn":
+        return "am_fenrir"
+    
+    elif person == "hien":
+        return "am_michael"
+    
+    elif person == "tataru":
+        return "am_michael"
+    
+    elif person == "cid":
+        return "bm_fable"
+    
+    elif person == "elidibus":
+        return "am_michael"
+    elif person == "yugiri":
+        return "af_bella"
+    elif person == "gosetsu":
+        return "zm_yunjian"
+    
+    return currentVoice
 
 
 # Directories containing PLS files
@@ -81,7 +147,7 @@ pls_directories = [
 
 
 # Configure Kokoro pipeline
-pipeline = KPipeline(lang_code='b')
+pipeline = KPipeline(lang_code=reagionVoice)
 
 for directory in pls_directories:
     for root, _, files in os.walk(directory):
@@ -107,6 +173,10 @@ def on_message(ws, message):
 
         if data.get('Type') == 'Say':
             text = data.get('Payload', '')
+            print(f"\n{str(data)}\n")
+            personSpeaking = data.get('Speaker','').lower()
+
+            print(f"\n{personSpeaking}\n")
             voice_type = data.get('Voice', {}).get('Name', '').lower()
 
 
@@ -116,12 +186,13 @@ def on_message(ws, message):
 
             print("Say Payload:", payload)
             print("Voice:", voice_type or "Unknown")
+            print(f"Person: {personSpeaking}")
 
             # Pick voice
             voice = maleVoice
             if voice_type == 'female':
                 voice = femaleVoice
-
+            voice = getVoice(personSpeaking,voice)
             # Generate audio using Kokoro
             generator = pipeline(payload, voice=voice, speed=voiceSpeed)
             print(f"with voice {voice}")
@@ -142,6 +213,7 @@ def on_error(ws, error):
         print("You didn't open FFXIV Launcher")
         for i in range(5):
             print(f"sleaping in {5-i}")
+            time.sleep(1)
             i+=1
     elif "10053" in error_str:
         print("Error in Processing Request Reconecting ...")
