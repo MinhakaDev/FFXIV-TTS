@@ -121,9 +121,6 @@ def getVoice(person,currentVoice):
     elif person == "hien":
         return "am_michael"
     
-    elif person == "tataru":
-        return "am_michael"
-    
     elif person == "cid":
         return "bm_fable"
     
