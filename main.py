@@ -6,6 +6,21 @@ import sounddevice as sd
 import xml.etree.ElementTree as ET
 import time
 
+#loading voices from the json file
+with open("./voices.json", "r", encoding="utf-8") as f:
+    VOICES_BY_GENDER = json.load(f)
+    
+VOICE_LOOKUP = {}
+
+for gender_data in VOICES_BY_GENDER.values():
+    for voice, people in gender_data.items():
+        for person in people:
+            VOICE_LOOKUP[person.lower()] = voice
+
+
+
+
+
 with open('./settings.json', 'r', encoding='utf-8') as f:
     settings = json.load(f)
 if settings['region'] == "US":
@@ -70,69 +85,13 @@ def transform_string(input_string, aliases_dict):
     
     return transformed_string
 
-def getVoice(person,currentVoice):
-    if person == "alphinaud":
-        return "bm_fable"
-    
-    elif person == "alisaie":
-        return "bf_emma"
-    
-    elif person == "wuk lamat":
-        return "bm_daniel"
-    
-    elif person == "y'shtola":
-        return "bf_alice"
-    
-    elif person == "g'raha tia":
-        return "bf_isabella"
-    
-    elif person == "thancred":
-        return "bm_fable"
-    
-    elif person == "krile":
-        return "bf_lily"
-    
-    elif person == "urianger":
-        return "bm_lewis"
-    
-    elif person == "lyse":
-        return "af_heart"
-    
-    elif person == "erenville":
-        return "am_fenrir"
-    
-    elif person == "estinien":
-        return "af_bella"
-    
-    elif person == "minfilia":
-        return "f_heart"
-    
+def getVoice(person, currentVoice):
+    person = person.lower()
 
+    if person in ("raubahn", "crystal exarch"):
+        print("test")
 
-    elif person == "zero":
-        return "am_puck"
-    
-    elif person == "emet-selch":
-        return ""
-    
-    elif person == "raubahn":
-        return "am_fenrir"
-    
-    elif person == "hien":
-        return "am_michael"
-    
-    elif person == "cid":
-        return "bm_fable"
-    
-    elif person == "elidibus":
-        return "am_michael"
-    elif person == "yugiri":
-        return "af_bella"
-    elif person == "gosetsu":
-        return "zm_yunjian"
-    
-    return currentVoice
-
+    return VOICE_LOOKUP.get(person, currentVoice)
 
 # Directories containing PLS files
 pls_directories = [

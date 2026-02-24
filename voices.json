@@ -1,0 +1,59 @@
+{
+  "male": {
+    "bm_fable": [
+      "alphinaud",
+      "thancred",
+      "cid"
+    ],
+    "bm_daniel": [
+      "wuk lamat",
+      "moren",
+      "emet-selch"
+    ],
+    "bm_lewis": [
+      "urianger"
+    ],
+    "am_fenrir": [
+      "erenville",
+      "raubahn",
+      "crystal exarch"
+    ],
+    "am_puck": [
+      "zero"
+    ],
+    "am_michael": [
+      "hien",
+      "elidibus"
+    ],
+    "zm_yunjian": [
+      "gosetsu"
+    ],
+    "bm_george": [
+    ]
+  },
+
+  "female": {
+    "bf_emma": [
+      "alisaie"
+    ],
+    "bf_alice": [
+      "y'shtola"
+    ],
+    "bf_isabella": [
+      "g'raha tia"
+    ],
+    "bf_lily": [
+      "krile"
+    ],
+    "af_heart": [
+      "lyse",
+      "ryne",
+      "minfilia"
+    ],
+    "af_bella": [
+      "estinien",
+      "yugiri",
+      "lyna"
+    ]
+  }
+}
