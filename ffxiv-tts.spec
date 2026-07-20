@@ -16,7 +16,7 @@ block_cipher = None
 datas = []
 binaries = []
 hiddenimports = []
-for pkg in ('kokoro', 'misaki', 'phonemizer', 'segments', 'csvw', 'language_tags'):
+for pkg in ('kokoro', 'misaki', 'phonemizer', 'segments', 'csvw', 'language_tags', 'espeakng_loader'):
     pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(pkg)
     datas += pkg_datas
     binaries += pkg_binaries
