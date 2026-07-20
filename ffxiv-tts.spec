@@ -5,14 +5,29 @@
 # folders next to the executables (see build.sh / build.bat), since settings_gui.py writes
 # to them at runtime.
 
+from PyInstaller.utils.hooks import collect_all
+
 block_cipher = None
+
+# kokoro's G2P dependency chain (misaki -> phonemizer -> segments -> csvw -> language_tags)
+# ships data files (JSON lookup tables etc.) that are read by path at runtime rather than
+# imported, so PyInstaller's import-tracing never finds them on its own, and no official
+# PyInstaller hook exists for these niche packages. Explicitly collect each one's data.
+datas = []
+binaries = []
+hiddenimports = []
+for pkg in ('kokoro', 'misaki', 'phonemizer', 'segments', 'csvw', 'language_tags'):
+    pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(pkg)
+    datas += pkg_datas
+    binaries += pkg_binaries
+    hiddenimports += pkg_hiddenimports
 
 main_a = Analysis(
     ['src/main.py'],
     pathex=['src'],
-    binaries=[],
-    datas=[],
-    hiddenimports=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
     excludes=[],
