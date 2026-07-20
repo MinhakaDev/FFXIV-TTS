@@ -100,19 +100,32 @@ pls_directories = [
 ]
 
 
+def select_output_device(devices, configured):
+    # "default" is a static ALSA alias that doesn't necessarily route to whatever
+    # output the user actually has selected in their desktop's audio settings, so
+    # playback can silently go nowhere. Respect an explicit settings.json override
+    # first; otherwise prefer a PipeWire/PulseAudio device, which does route through
+    # the desktop's real audio server.
+    configured = (configured or "auto").strip()
+    if configured.lower() != "auto":
+        for i, d in enumerate(devices):
+            if d['max_output_channels'] > 0 and d['name'] == configured:
+                return i
+        for i, d in enumerate(devices):
+            if d['max_output_channels'] > 0 and configured.lower() in d['name'].lower():
+                return i
+        print(f"Configured audio_device '{configured}' not found, falling back to auto-detection.")
+
+    for name in ('pipewire', 'pulse'):
+        for i, d in enumerate(devices):
+            if d['max_output_channels'] > 0 and name in d['name'].lower():
+                return i
+    return None
+
+
 try:
-    # Prefer a PipeWire/PulseAudio device over the generic ALSA "default" alias -
-    # "default" doesn't necessarily route to whatever output the user actually has
-    # selected in their desktop's audio settings, so playback can silently go nowhere.
     devices = sd.query_devices()
-    preferred_output = next(
-        (
-            i for name in ('pipewire', 'pulse')
-            for i, d in enumerate(devices)
-            if d['max_output_channels'] > 0 and name in d['name'].lower()
-        ),
-        None,
-    )
+    preferred_output = select_output_device(devices, settings.get('audio_device', 'auto'))
     if preferred_output is not None:
         _, current_input = sd.default.device
         sd.default.device = (current_input, preferred_output)

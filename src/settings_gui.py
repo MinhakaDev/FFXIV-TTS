@@ -3,6 +3,8 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+import sounddevice as sd
+
 import paths
 
 KNOWN_VOICES = {
@@ -70,6 +72,13 @@ def regroup_voices(rows):
     return voices
 
 
+def list_output_devices():
+    try:
+        return [d['name'] for d in sd.query_devices() if d['max_output_channels'] > 0]
+    except Exception:
+        return []
+
+
 def build_name_lexicon(name, pronunciation):
     name_upper = name[0].upper() + name[1:]
     name_lower = name[0].lower() + name[1:]
@@ -94,6 +103,7 @@ class GeneralTab(ttk.Frame):
         self.speed_var = tk.DoubleVar(value=self.settings.get("speed", 1.0))
         self.male_volume_var = tk.DoubleVar(value=self.settings.get("malevolume", 0.7))
         self.female_volume_var = tk.DoubleVar(value=self.settings.get("femalevolume", 0.7))
+        self.audio_device_var = tk.StringVar(value=self.settings.get("audio_device", "auto"))
 
         ttk.Label(self, text="Region").grid(row=0, column=0, sticky="w", pady=6)
         region_frame = ttk.Frame(self)
@@ -110,7 +120,17 @@ class GeneralTab(ttk.Frame):
         ttk.Label(self, text="Female voice volume").grid(row=3, column=0, sticky="w", pady=6)
         ttk.Spinbox(self, from_=0.0, to=2.0, increment=0.1, textvariable=self.female_volume_var, width=8).grid(row=3, column=1, sticky="w")
 
-        ttk.Button(self, text="Save", command=self.save).grid(row=4, column=0, columnspan=2, pady=16)
+        ttk.Label(self, text="Audio output device").grid(row=4, column=0, sticky="w", pady=6)
+        ttk.Combobox(
+            self, textvariable=self.audio_device_var,
+            values=["auto"] + list_output_devices(), width=32,
+        ).grid(row=4, column=1, sticky="w")
+        ttk.Label(
+            self, text="\"auto\" picks pipewire/pulse over the generic ALSA default.\nOnly change this if audio doesn't play or comes out the wrong device.",
+            justify="left", foreground="gray",
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(0, 6))
+
+        ttk.Button(self, text="Save", command=self.save).grid(row=6, column=0, columnspan=2, pady=16)
 
     def save(self):
         try:
@@ -118,6 +138,7 @@ class GeneralTab(ttk.Frame):
             self.settings["speed"] = float(self.speed_var.get())
             self.settings["malevolume"] = float(self.male_volume_var.get())
             self.settings["femalevolume"] = float(self.female_volume_var.get())
+            self.settings["audio_device"] = self.audio_device_var.get().strip() or "auto"
             save_settings(self.settings)
         except (tk.TclError, ValueError) as exc:
             messagebox.showerror("Invalid value", str(exc))
