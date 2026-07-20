@@ -57,15 +57,23 @@ where you can customize:
 Building the executables is only needed if you're packaging a new release; most users should just
 use Option A above.
 
+**Automatically (recommended):** push a version tag (`git tag v1.0.0 && git push --tags`) and
+[`.github/workflows/build.yml`](.github/workflows/build.yml) builds both the Windows `.exe` and
+the Linux binary on GitHub's own runners and attaches them to a GitHub Release. You can also
+trigger it manually without tagging from the repo's Actions tab ("Build binaries" -> "Run
+workflow") to get downloadable build artifacts.
+
+**Manually:**
+
 ```
-pip install -r requirements-build.txt
 ./build.sh      # Linux, produces dist/ffxiv-tts, dist/ffxiv-tts-settings
 build.bat       # Windows, produces dist\ffxiv-tts.exe, dist\ffxiv-tts-settings.exe
 ```
 
 PyInstaller doesn't cross-compile, so build on the OS you're targeting: `build.sh` on Linux for
-the Linux binary, `build.bat` on Windows for the `.exe`. Each run copies `settings/` and
-`lexicons/` into `dist/` so the folder is ready to zip and share.
+the Linux binary, `build.bat` on Windows for the `.exe`. Each run installs `requirements.txt` +
+`requirements-build.txt` and copies `settings/`/`lexicons/` into `dist/` so the folder is ready to
+zip and share.
 
 ---
 

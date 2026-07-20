@@ -1,0 +1,65 @@
+name: Build binaries
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: ffxiv-tts-linux
+          - os: windows-latest
+            artifact_name: ffxiv-tts-windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Linux audio libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev libsndfile1
+
+      - name: Build executables
+        shell: bash
+        run: |
+          pip install -r requirements.txt -r requirements-build.txt
+          pyinstaller ffxiv-tts.spec
+          cp -r settings dist/settings
+          cp -r lexicons dist/lexicons
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Zip release assets
+        run: |
+          cd artifacts/ffxiv-tts-linux && zip -r ../../ffxiv-tts-linux.zip . && cd -
+          cd artifacts/ffxiv-tts-windows && zip -r ../../ffxiv-tts-windows.zip . && cd -
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ffxiv-tts-linux.zip
+            ffxiv-tts-windows.zip

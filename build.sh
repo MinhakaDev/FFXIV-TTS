@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-pip install -r requirements-build.txt
+pip install -r requirements.txt -r requirements-build.txt
 pyinstaller ffxiv-tts.spec
 
 cp -r settings dist/settings

@@ -1,5 +1,5 @@
 @echo off
-pip install -r requirements-build.txt
+pip install -r requirements.txt -r requirements-build.txt
 pyinstaller ffxiv-tts.spec
 
 xcopy /E /I /Y settings dist\settings
