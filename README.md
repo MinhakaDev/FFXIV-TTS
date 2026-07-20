@@ -30,9 +30,10 @@ On Linux you'll also need the system audio libraries the binary links against:
 
 1. Download [Python 3.12](https://www.python.org/downloads/release/python-3120/).
 2. Download this GitHub repository.
-3. Windows: run `install.bat`, then `settings.bat`, then `run.bat`.
-   Linux: run `./install.sh`, then `./settings.sh`, then `./run.sh`.
-4. Open FFXIV with the launcher and log in before starting `run.bat`/`run.sh`.
+3. `pip install -r requirements.txt` (Linux also needs
+   `sudo apt-get install portaudio19-dev libsndfile1` first).
+4. `python src/settings_gui.py` to configure your settings (see [Settings](#settings)).
+5. Open FFXIV with the launcher and log in, then `python src/main.py`.
 
 ---
 
@@ -41,7 +42,7 @@ Congratulations! Your setup is complete, and you can now start listening instead
 
 ---
 ## Settings
-`ffxiv-tts-settings` (or `settings.bat`/`settings.sh` when running from source) opens a small GUI
+`ffxiv-tts-settings` (or `python src/settings_gui.py` when running from source) opens a small GUI
 where you can customize:
 - [x] The Pronunciation of Your Name.
 - [x] If you want British English or American English
