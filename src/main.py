@@ -6,8 +6,10 @@ import sounddevice as sd
 import xml.etree.ElementTree as ET
 import time
 
-#loading voices from the json file
-with open("./voices.json", "r", encoding="utf-8") as f:
+import paths
+
+# loading voices from the json file
+with open(os.path.join(paths.settings_dir(), "voices.json"), "r", encoding="utf-8") as f:
     VOICES_BY_GENDER = json.load(f)
     
 VOICE_LOOKUP = {}
@@ -18,10 +20,7 @@ for gender_data in VOICES_BY_GENDER.values():
             VOICE_LOOKUP[person.lower()] = voice
 
 
-
-
-
-with open('./settings.json', 'r', encoding='utf-8') as f:
+with open(os.path.join(paths.settings_dir(), "settings.json"), "r", encoding="utf-8") as f:
     settings = json.load(f)
 if settings['region'] == "US":
     reagionVoice = "a"
@@ -87,18 +86,14 @@ def transform_string(input_string, aliases_dict):
 
 def getVoice(person, currentVoice):
     person = person.lower()
-
-    if person in ("raubahn", "crystal exarch"):
-        print("test")
-
     return VOICE_LOOKUP.get(person, currentVoice)
 
 # Directories containing PLS files
 pls_directories = [
-    './lexicons/Characters-Locations-System',
-    './lexicons/Your-Name',
-    './lexicons/Stutter-Replacers',
-    './lexicons/Chat-FFXIV-Acronyms'
+    os.path.join(paths.lexicons_dir(), 'Characters-Locations-System'),
+    os.path.join(paths.lexicons_dir(), 'Your-Name'),
+    os.path.join(paths.lexicons_dir(), 'Stutter-Replacers'),
+    os.path.join(paths.lexicons_dir(), 'Chat-FFXIV-Acronyms'),
 ]
 
 

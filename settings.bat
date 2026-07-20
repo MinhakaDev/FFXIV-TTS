@@ -1,1 +1,1 @@
-python settings.py
+python src\settings_gui.py

@@ -11,13 +11,28 @@ The purpose of this project is to enhance the FFXIV experience by integrating go
 
 ## Installation Guide
 
-1. If you don’t already have the FFXIV launcher Installed and Configured, follow the instructions in [How to Install and Configure FFXIV Launcher](#how-to-install-and-configure-ffxiv-launcher).
-2. Download [Python 3.12](https://www.python.org/downloads/release/python-3120/).
-3. Download this Github Repository.
-4. Run "Instalation.bat" - This will install all Dependencies.
-5. Run "Settings.bat" - if you want to learn more go to [Settings](#settings).
-6. Open FFXIV with the launcher and log in.
-7. Run "Start.bat".
+If you don't already have the FFXIV launcher installed and configured, follow the instructions in
+[How to Install and Configure FFXIV Launcher](#how-to-install-and-configure-ffxiv-launcher) first.
+
+### Option A: Download a release (recommended, no Python required)
+
+1. Download the latest release zip for your platform (`ffxiv-tts.exe` on Windows, `ffxiv-tts` on
+   Linux), which includes `ffxiv-tts-settings`, a `settings/` folder, and a `lexicons/` folder.
+2. Run `ffxiv-tts-settings` once to configure your region, speed, volumes, name pronunciation,
+   and character voice assignments (see [Settings](#settings)).
+3. Open FFXIV with the launcher and log in.
+4. Run `ffxiv-tts`.
+
+On Linux you'll also need the system audio libraries the binary links against:
+`sudo apt-get install portaudio19-dev libsndfile1` (or your distro's equivalent).
+
+### Option B: Run from source
+
+1. Download [Python 3.12](https://www.python.org/downloads/release/python-3120/).
+2. Download this GitHub repository.
+3. Windows: run `install.bat`, then `settings.bat`, then `run.bat`.
+   Linux: run `./install.sh`, then `./settings.sh`, then `./run.sh`.
+4. Open FFXIV with the launcher and log in before starting `run.bat`/`run.sh`.
 
 ---
 
@@ -26,12 +41,31 @@ Congratulations! Your setup is complete, and you can now start listening instead
 
 ---
 ## Settings
-What you can customize with "Settings.bat":
+`ffxiv-tts-settings` (or `settings.bat`/`settings.sh` when running from source) opens a small GUI
+where you can customize:
 - [x] The Pronunciation of Your Name.
 - [x] If you want British English or American English
 - [x] The speed at which the male and female voices speak
-- [x] The Volume of the TTS 
+- [x] The Volume of the TTS
+- [x] Which voice each character/NPC speaks with
 - [ ] Use GPU
+
+---
+
+## Building the executables
+
+Building the executables is only needed if you're packaging a new release; most users should just
+use Option A above.
+
+```
+pip install -r requirements-build.txt
+./build.sh      # Linux, produces dist/ffxiv-tts, dist/ffxiv-tts-settings
+build.bat       # Windows, produces dist\ffxiv-tts.exe, dist\ffxiv-tts-settings.exe
+```
+
+PyInstaller doesn't cross-compile, so build on the OS you're targeting: `build.sh` on Linux for
+the Linux binary, `build.bat` on Windows for the `.exe`. Each run copies `settings/` and
+`lexicons/` into `dist/` so the folder is ready to zip and share.
 
 ---
 
