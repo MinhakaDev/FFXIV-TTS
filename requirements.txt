@@ -2,5 +2,6 @@
 --extra-index-url https://pypi.org/simple
 
 kokoro
+numpy
 sounddevice
 websocket-client

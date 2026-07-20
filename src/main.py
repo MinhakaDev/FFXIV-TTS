@@ -2,11 +2,14 @@ import os
 import json
 import websocket
 from kokoro import KPipeline
+import numpy as np
 import sounddevice as sd
 import xml.etree.ElementTree as ET
 import time
 
 import paths
+
+KOKORO_SAMPLE_RATE = 24000
 
 # loading voices from the json file
 with open(os.path.join(paths.settings_dir(), "voices.json"), "r", encoding="utf-8") as f:
@@ -97,6 +100,22 @@ pls_directories = [
 ]
 
 
+try:
+    OUTPUT_SAMPLE_RATE = int(sd.query_devices(kind='output')['default_samplerate'])
+except Exception as e:
+    print(f"Could not query output device sample rate, defaulting to {KOKORO_SAMPLE_RATE}: {e}")
+    OUTPUT_SAMPLE_RATE = KOKORO_SAMPLE_RATE
+
+
+def resample_audio(audio, orig_sr, target_sr):
+    if orig_sr == target_sr:
+        return audio
+    target_length = int(round(len(audio) * target_sr / orig_sr))
+    orig_indices = np.arange(len(audio))
+    target_indices = np.linspace(0, len(audio) - 1, num=target_length)
+    return np.interp(target_indices, orig_indices, audio).astype(audio.dtype)
+
+
 # Configure Kokoro pipeline
 pipeline = KPipeline(lang_code=reagionVoice)
 
@@ -153,7 +172,8 @@ def on_message(ws, message):
                 adjusted_audio = audio * maleVoiceVolume
                 if voice == femaleVoice:
                     adjusted_audio = audio * femaleVoiceVolume
-                sd.play(adjusted_audio, samplerate=24000)
+                adjusted_audio = resample_audio(adjusted_audio, KOKORO_SAMPLE_RATE, OUTPUT_SAMPLE_RATE)
+                sd.play(adjusted_audio, samplerate=OUTPUT_SAMPLE_RATE)
 
     except Exception as e:
         print(f"Error parsing or processing message: {e}")
