@@ -101,9 +101,26 @@ pls_directories = [
 
 
 try:
+    # Prefer a PipeWire/PulseAudio device over the generic ALSA "default" alias -
+    # "default" doesn't necessarily route to whatever output the user actually has
+    # selected in their desktop's audio settings, so playback can silently go nowhere.
+    devices = sd.query_devices()
+    preferred_output = next(
+        (
+            i for name in ('pipewire', 'pulse')
+            for i, d in enumerate(devices)
+            if d['max_output_channels'] > 0 and name in d['name'].lower()
+        ),
+        None,
+    )
+    if preferred_output is not None:
+        _, current_input = sd.default.device
+        sd.default.device = (current_input, preferred_output)
+        print(f"Using audio output device: {devices[preferred_output]['name']}")
+
     OUTPUT_SAMPLE_RATE = int(sd.query_devices(kind='output')['default_samplerate'])
 except Exception as e:
-    print(f"Could not query output device sample rate, defaulting to {KOKORO_SAMPLE_RATE}: {e}")
+    print(f"Could not configure output device, defaulting to {KOKORO_SAMPLE_RATE}: {e}")
     OUTPUT_SAMPLE_RATE = KOKORO_SAMPLE_RATE
 
 
