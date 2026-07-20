@@ -169,6 +169,7 @@ def on_message(ws, message):
             # Stream the audio using sounddevice
             for i, (gs, ps, audio) in enumerate(generator):
                 print(f"Streaming audio segment {i + 1}...")
+                audio = np.asarray(audio, dtype=np.float32)
                 adjusted_audio = audio * maleVoiceVolume
                 if voice == femaleVoice:
                     adjusted_audio = audio * femaleVoiceVolume
