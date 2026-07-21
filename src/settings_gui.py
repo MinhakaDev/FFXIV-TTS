@@ -214,11 +214,13 @@ class AudioScreen(Screen):
 
         ctk.CTkLabel(
             self.body,
-            text='"auto" prefers pipewire/pulse over the generic ALSA default.\n'
-                 "Headset missing? Switch it on, then press Refresh - it is only detected\n"
-                 "if it was already awake. Wireless headsets often sleep on their own.\n"
-                 "You can also pick pipewire/pulse and choose the headset in your\n"
-                 "system's sound settings instead.",
+            text='"auto" follows whatever output your system is already using, and is\n'
+                 "almost always the right choice - it also keeps working when a wireless\n"
+                 "headset sleeps and wakes.\n\n"
+                 "Headsets often do not appear in this list at all: while PipeWire or\n"
+                 "PulseAudio owns the device, its raw entry is hidden here. That is normal.\n"
+                 'Leave this on "auto" and pick the headset in your system sound settings.\n\n'
+                 "Press Refresh if you connected a device just now.",
             font=ctk.CTkFont(size=11), text_color=("gray45", "gray60"),
             anchor="w", justify="left",
         ).grid(row=1, column=1, sticky="w", pady=(6, 0))

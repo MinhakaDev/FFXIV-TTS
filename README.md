@@ -54,8 +54,14 @@ where you can customize:
 
 **Hearing nothing?** Open the settings app, go to the **Audio** screen, and press
 **Test sound**. If you don't hear the tone, pick a different output device from the dropdown
-and test again until you do, then press Save. The default (`auto`) prefers a PipeWire or
-PulseAudio device, which is usually correct, but it can't be right on every machine.
+and test again until you do, then press Save.
+
+Leave the device on `auto` unless you have a reason not to: it follows whatever output your
+system is already using. On Linux, individual headsets usually do **not** appear in the
+dropdown — while PipeWire/PulseAudio owns the device its raw ALSA entry is hidden, which is
+normal. Keep `auto` and select the headset in your system's sound settings instead. Picking a
+raw `(hw:X,Y)` device directly is fragile: those vanish when a wireless headset sleeps and
+their numbering shifts between reboots.
 
 ---
 
