@@ -24,7 +24,13 @@ If you don't already have the FFXIV launcher installed and configured, follow th
 4. Run `ffxiv-tts`.
 
 On Linux you'll also need the system audio libraries the binary links against:
-`sudo apt-get install portaudio19-dev libsndfile1` (or your distro's equivalent).
+`sudo apt-get install portaudio19-dev libsndfile1 libasound2` (or your distro's equivalent —
+on Arch: `sudo pacman -S portaudio libsndfile alsa-lib`).
+
+ALSA is deliberately not bundled, so the app uses your system's copy and can see the
+`pipewire`/`pulse` devices, which are ALSA plugins. If those don't appear in the settings
+app's device list, install the ALSA bridge for your sound server: `pipewire-alsa` (or
+`pulseaudio-alsa`) on Arch, `pipewire-alsa` / `libasound2-plugins` on Debian and Ubuntu.
 
 ### Option B: Run from source
 
