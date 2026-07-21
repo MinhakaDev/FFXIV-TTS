@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import websocket
 from kokoro import KPipeline
 import numpy as np
@@ -100,6 +101,13 @@ pls_directories = [
 ]
 
 
+def normalize_device_name(name):
+    # ALSA card/device indices ("(hw:0,0)") shift between boots, replugs, and when a
+    # wireless headset sleeps and wakes, so a saved name stops matching the same
+    # physical device. Compare without them.
+    return re.sub(r'\s*\(hw:\d+,\d+\)\s*$', '', name).strip().lower()
+
+
 def select_output_device(devices, configured):
     # "default" is a static ALSA alias that doesn't necessarily route to whatever
     # output the user actually has selected in their desktop's audio settings, so
@@ -107,18 +115,27 @@ def select_output_device(devices, configured):
     # first; otherwise prefer a PipeWire/PulseAudio device, which does route through
     # the desktop's real audio server.
     configured = (configured or "auto").strip()
+    outputs = [(i, d) for i, d in enumerate(devices) if d['max_output_channels'] > 0]
+
     if configured.lower() != "auto":
-        for i, d in enumerate(devices):
-            if d['max_output_channels'] > 0 and d['name'] == configured:
-                return i
-        for i, d in enumerate(devices):
-            if d['max_output_channels'] > 0 and configured.lower() in d['name'].lower():
-                return i
-        print(f"Configured audio_device '{configured}' not found, falling back to auto-detection.")
+        target = normalize_device_name(configured)
+        for matches in (
+            lambda d: d['name'] == configured,
+            lambda d: normalize_device_name(d['name']) == target,
+            lambda d: target in normalize_device_name(d['name']),
+        ):
+            for i, d in outputs:
+                if matches(d):
+                    return i
+
+        print(f"Configured audio_device '{configured}' not found. Available output devices:")
+        for _, d in outputs:
+            print(f"  - {d['name']}")
+        print("Falling back to auto-detection.")
 
     for name in ('pipewire', 'pulse'):
-        for i, d in enumerate(devices):
-            if d['max_output_channels'] > 0 and name in d['name'].lower():
+        for i, d in outputs:
+            if name in d['name'].lower():
                 return i
     return None
 
