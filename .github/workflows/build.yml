@@ -1,16 +1,42 @@
 name: Build binaries
 
+# Every push to main publishes a release with the next patch version, so there is no
+# need to create tags by hand. Add "[skip ci]" to a commit message to skip a build
+# (useful for README-only changes). Manual runs build artifacts without releasing.
 on:
-  workflow_dispatch:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # tags are needed to work out the current version
+
+      - name: Work out the next version
+        id: next
+        run: |
+          latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)
+          if [ -z "$latest" ]; then
+            next="v0.1.0"
+          else
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            next="v$major.$minor.$((patch + 1))"
+          fi
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+          echo "Latest tag: ${latest:-none}. Releasing: $next"
+
   build:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -40,7 +66,7 @@ jobs:
         run: |
           pip install -r requirements.txt -r requirements-build.txt
           python -m spacy download en_core_web_sm
-          pyinstaller ffxiv-tts.spec
+          pyinstaller --noconfirm ffxiv-tts.spec
           cp -r settings dist/settings
           cp -r lexicons dist/lexicons
 
@@ -50,8 +76,9 @@ jobs:
           path: dist/
 
   release:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, build]
+    # Manual runs are for testing a build, so they stop at downloadable artifacts.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -63,8 +90,13 @@ jobs:
           cd artifacts/ffxiv-tts-linux && zip -r ../../ffxiv-tts-linux.zip . && cd -
           cd artifacts/ffxiv-tts-windows && zip -r ../../ffxiv-tts-windows.zip . && cd -
 
+      # Creates the tag at this commit as well as the release, so no tag push is
+      # needed here - which also means this workflow can't retrigger itself.
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: ${{ needs.version.outputs.tag }}
+          generate_release_notes: true
           files: |
             ffxiv-tts-linux.zip
             ffxiv-tts-windows.zip

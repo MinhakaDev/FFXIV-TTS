@@ -71,12 +71,28 @@ their numbering shifts between reboots.
 
 ---
 
-## Building the executables
+## Releases
 
-Building the executables is only needed if you're packaging a new release; most users should just
-use Option A above.
+Users don't need any of this — they just download a release (Option A above). This section is
+for maintaining the project.
 
-### Locally (fastest while developing)
+### Automatic (how releases are published)
+
+Every push to `main` builds the Windows `.exe` and the Linux binary on GitHub's runners, tags
+the commit with the next patch version, and publishes a GitHub Release with both zips attached.
+Nothing to run and no tags to create by hand — see
+[`.github/workflows/build.yml`](.github/workflows/build.yml).
+
+- Put `[skip ci]` in the commit message to skip a build (for README-only changes).
+- Bumping the minor or major version is the one manual step: create that tag yourself
+  (`git tag v0.2.0 && git push origin v0.2.0`) and subsequent pushes continue from it.
+- Running the workflow by hand from the Actions tab builds downloadable artifacts **without**
+  publishing a release, which is useful for testing a build.
+
+### Locally (developer convenience)
+
+Building locally is just a faster feedback loop while developing — it isn't how releases are
+made, and it can't produce the Windows `.exe` (PyInstaller doesn't cross-compile).
 
 One-time setup — the dependencies need Python 3.12, so if your system Python is newer
 (Arch ships 3.14), create a 3.12 environment with [uv](https://docs.astral.sh/uv/):
@@ -87,7 +103,7 @@ uv venv --python 3.12 .venv
 sudo pacman -S portaudio libsndfile alsa-lib pipewire-alsa   # Arch; see Option A for Debian
 ```
 
-Then, for every build:
+Then:
 
 ```bash
 source .venv/bin/activate
@@ -95,19 +111,9 @@ source .venv/bin/activate
 ./dist/ffxiv-tts            # or ./dist/ffxiv-tts-settings
 ```
 
-`build.sh` works with both plain and uv-created virtualenvs, keeps any settings you already
-configured in `dist/`, and skips re-downloading dependencies that haven't changed, so repeat
-builds are much quicker than the first. To test a code change without building at all, just run
-`python src/main.py` or `python src/settings_gui.py` — that skips PyInstaller entirely, though
-it won't catch bundling problems.
-
-### On GitHub (for releases)
-
-Push a version tag (`git tag v1.0.0 && git push --tags`) and
-[`.github/workflows/build.yml`](.github/workflows/build.yml) builds both the Windows `.exe` and
-the Linux binary on GitHub's own runners and attaches them to a GitHub Release. You can also
-trigger it manually without tagging from the repo's Actions tab ("Build binaries" -> "Run
-workflow") to get downloadable build artifacts.
+`build.sh` works with both plain and uv-created virtualenvs and keeps any settings you already
+configured in `dist/`. Faster still, for changes that aren't about packaging: run
+`python src/main.py` or `python src/settings_gui.py` directly and skip PyInstaller entirely.
 
 PyInstaller doesn't cross-compile, so build on the OS you're targeting: `build.sh` on Linux for
 the Linux binary, `build.bat` on Windows for the `.exe`. That's the main reason to use the
