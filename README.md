@@ -76,23 +76,42 @@ their numbering shifts between reboots.
 Building the executables is only needed if you're packaging a new release; most users should just
 use Option A above.
 
-**Automatically (recommended):** push a version tag (`git tag v1.0.0 && git push --tags`) and
+### Locally (fastest while developing)
+
+One-time setup — the dependencies need Python 3.12, so if your system Python is newer
+(Arch ships 3.14), create a 3.12 environment with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv python install 3.12
+uv venv --python 3.12 .venv
+sudo pacman -S portaudio libsndfile alsa-lib pipewire-alsa   # Arch; see Option A for Debian
+```
+
+Then, for every build:
+
+```bash
+source .venv/bin/activate
+./build.sh
+./dist/ffxiv-tts            # or ./dist/ffxiv-tts-settings
+```
+
+`build.sh` works with both plain and uv-created virtualenvs, keeps any settings you already
+configured in `dist/`, and skips re-downloading dependencies that haven't changed, so repeat
+builds are much quicker than the first. To test a code change without building at all, just run
+`python src/main.py` or `python src/settings_gui.py` — that skips PyInstaller entirely, though
+it won't catch bundling problems.
+
+### On GitHub (for releases)
+
+Push a version tag (`git tag v1.0.0 && git push --tags`) and
 [`.github/workflows/build.yml`](.github/workflows/build.yml) builds both the Windows `.exe` and
 the Linux binary on GitHub's own runners and attaches them to a GitHub Release. You can also
 trigger it manually without tagging from the repo's Actions tab ("Build binaries" -> "Run
 workflow") to get downloadable build artifacts.
 
-**Manually:**
-
-```
-./build.sh      # Linux, produces dist/ffxiv-tts, dist/ffxiv-tts-settings
-build.bat       # Windows, produces dist\ffxiv-tts.exe, dist\ffxiv-tts-settings.exe
-```
-
 PyInstaller doesn't cross-compile, so build on the OS you're targeting: `build.sh` on Linux for
-the Linux binary, `build.bat` on Windows for the `.exe`. Each run installs `requirements.txt` +
-`requirements-build.txt` and copies `settings/`/`lexicons/` into `dist/` so the folder is ready to
-zip and share.
+the Linux binary, `build.bat` on Windows for the `.exe`. That's the main reason to use the
+GitHub build — it produces the Windows executable without needing a Windows machine.
 
 ---
 
