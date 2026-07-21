@@ -49,7 +49,13 @@ where you can customize:
 - [x] The speed at which the male and female voices speak
 - [x] The Volume of the TTS
 - [x] Which voice each character/NPC speaks with
+- [x] Which audio device the speech plays through (with a "Test sound" button)
 - [ ] Use GPU
+
+**Hearing nothing?** Open the settings app, go to the **Audio** screen, and press
+**Test sound**. If you don't hear the tone, pick a different output device from the dropdown
+and test again until you do, then press Save. The default (`auto`) prefers a PipeWire or
+PulseAudio device, which is usually correct, but it can't be right on every machine.
 
 ---
 

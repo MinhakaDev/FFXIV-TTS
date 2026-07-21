@@ -1,6 +1,5 @@
 import os
 import json
-import re
 import websocket
 from kokoro import KPipeline
 import numpy as np
@@ -8,9 +7,10 @@ import sounddevice as sd
 import xml.etree.ElementTree as ET
 import time
 
+import audio as audio_output
 import paths
 
-KOKORO_SAMPLE_RATE = 24000
+from audio import KOKORO_SAMPLE_RATE
 
 # loading voices from the json file
 with open(os.path.join(paths.settings_dir(), "voices.json"), "r", encoding="utf-8") as f:
@@ -101,66 +101,15 @@ pls_directories = [
 ]
 
 
-def normalize_device_name(name):
-    # ALSA card/device indices ("(hw:0,0)") shift between boots, replugs, and when a
-    # wireless headset sleeps and wakes, so a saved name stops matching the same
-    # physical device. Compare without them.
-    return re.sub(r'\s*\(hw:\d+,\d+\)\s*$', '', name).strip().lower()
-
-
-def select_output_device(devices, configured):
-    # "default" is a static ALSA alias that doesn't necessarily route to whatever
-    # output the user actually has selected in their desktop's audio settings, so
-    # playback can silently go nowhere. Respect an explicit settings.json override
-    # first; otherwise prefer a PipeWire/PulseAudio device, which does route through
-    # the desktop's real audio server.
-    configured = (configured or "auto").strip()
-    outputs = [(i, d) for i, d in enumerate(devices) if d['max_output_channels'] > 0]
-
-    if configured.lower() != "auto":
-        target = normalize_device_name(configured)
-        for matches in (
-            lambda d: d['name'] == configured,
-            lambda d: normalize_device_name(d['name']) == target,
-            lambda d: target in normalize_device_name(d['name']),
-        ):
-            for i, d in outputs:
-                if matches(d):
-                    return i
-
-        print(f"Configured audio_device '{configured}' not found. Available output devices:")
-        for _, d in outputs:
-            print(f"  - {d['name']}")
-        print("Falling back to auto-detection.")
-
-    for name in ('pipewire', 'pulse'):
-        for i, d in outputs:
-            if name in d['name'].lower():
-                return i
-    return None
-
-
 try:
-    devices = sd.query_devices()
-    preferred_output = select_output_device(devices, settings.get('audio_device', 'auto'))
-    if preferred_output is not None:
-        _, current_input = sd.default.device
-        sd.default.device = (current_input, preferred_output)
-        print(f"Using audio output device: {devices[preferred_output]['name']}")
-
-    OUTPUT_SAMPLE_RATE = int(sd.query_devices(kind='output')['default_samplerate'])
+    device_name, OUTPUT_SAMPLE_RATE = audio_output.activate_output_device(
+        settings.get('audio_device', 'auto'), on_warning=print
+    )
+    if device_name:
+        print(f"Using audio output device: {device_name}")
 except Exception as e:
     print(f"Could not configure output device, defaulting to {KOKORO_SAMPLE_RATE}: {e}")
     OUTPUT_SAMPLE_RATE = KOKORO_SAMPLE_RATE
-
-
-def resample_audio(audio, orig_sr, target_sr):
-    if orig_sr == target_sr:
-        return audio
-    target_length = int(round(len(audio) * target_sr / orig_sr))
-    orig_indices = np.arange(len(audio))
-    target_indices = np.linspace(0, len(audio) - 1, num=target_length)
-    return np.interp(target_indices, orig_indices, audio).astype(audio.dtype)
 
 
 # Configure Kokoro pipeline
@@ -220,7 +169,7 @@ def on_message(ws, message):
                 adjusted_audio = audio * maleVoiceVolume
                 if voice == femaleVoice:
                     adjusted_audio = audio * femaleVoiceVolume
-                adjusted_audio = resample_audio(adjusted_audio, KOKORO_SAMPLE_RATE, OUTPUT_SAMPLE_RATE)
+                adjusted_audio = audio_output.resample_audio(adjusted_audio, KOKORO_SAMPLE_RATE, OUTPUT_SAMPLE_RATE)
                 sd.play(adjusted_audio, samplerate=OUTPUT_SAMPLE_RATE)
 
     except Exception as e:

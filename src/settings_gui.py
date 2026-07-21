@@ -1,10 +1,11 @@
 import json
 import os
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox
 
-import sounddevice as sd
+import customtkinter as ctk
 
+import audio as audio_output
 import paths
 
 KNOWN_VOICES = {
@@ -25,15 +26,34 @@ SETTINGS_PATH = os.path.join(paths.settings_dir(), "settings.json")
 VOICES_PATH = os.path.join(paths.settings_dir(), "voices.json")
 NAME_LEXICON_PATH = os.path.join(paths.lexicons_dir(), "Your-Name", "lexicon.pls")
 
+DEFAULT_SETTINGS = {
+    "region": "US",
+    "speed": 1.0,
+    "malevolume": 0.7,
+    "femalevolume": 0.7,
+    "audio_device": "auto",
+}
+
 
 def load_settings():
-    with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    settings = dict(DEFAULT_SETTINGS)
+    try:
+        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
+            settings.update(json.load(f))
+    except FileNotFoundError:
+        pass
+    return settings
 
 
-def save_settings(settings):
+def update_settings(**changes):
+    # Re-read before writing so each screen only touches its own keys - otherwise
+    # saving one screen would clobber changes another screen already wrote.
+    settings = load_settings()
+    settings.update(changes)
+    os.makedirs(os.path.dirname(SETTINGS_PATH), exist_ok=True)
     with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=4)
+    return settings
 
 
 def load_voices():
@@ -67,16 +87,8 @@ def regroup_voices(rows):
         voice = voice.strip()
         if not person or not voice:
             continue
-        gender = classify_gender(voice)
-        voices[gender].setdefault(voice, []).append(person)
+        voices[classify_gender(voice)].setdefault(voice, []).append(person)
     return voices
-
-
-def list_output_devices():
-    try:
-        return [d['name'] for d in sd.query_devices() if d['max_output_channels'] > 0]
-    except Exception:
-        return []
 
 
 def build_name_lexicon(name, pronunciation):
@@ -94,162 +106,297 @@ def build_name_lexicon(name, pronunciation):
 </lexicon>"""
 
 
-class GeneralTab(ttk.Frame):
+class Screen(ctk.CTkFrame):
+    """A page in the sidebar, with a title and a consistent content column."""
+
+    title = ""
+    subtitle = ""
+
     def __init__(self, parent):
-        super().__init__(parent, padding=16)
-        self.settings = load_settings()
+        super().__init__(parent, fg_color="transparent")
+        self.grid_columnconfigure(0, weight=1)
 
-        self.region_var = tk.StringVar(value=self.settings.get("region", "US"))
-        self.speed_var = tk.DoubleVar(value=self.settings.get("speed", 1.0))
-        self.male_volume_var = tk.DoubleVar(value=self.settings.get("malevolume", 0.7))
-        self.female_volume_var = tk.DoubleVar(value=self.settings.get("femalevolume", 0.7))
-        self.audio_device_var = tk.StringVar(value=self.settings.get("audio_device", "auto"))
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=28, pady=(24, 0))
+        ctk.CTkLabel(
+            header, text=self.title, font=ctk.CTkFont(size=22, weight="bold"), anchor="w"
+        ).pack(anchor="w")
+        if self.subtitle:
+            ctk.CTkLabel(
+                header, text=self.subtitle, font=ctk.CTkFont(size=12),
+                text_color=("gray45", "gray60"), anchor="w", justify="left",
+            ).pack(anchor="w", pady=(2, 0))
 
-        ttk.Label(self, text="Region").grid(row=0, column=0, sticky="w", pady=6)
-        region_frame = ttk.Frame(self)
-        region_frame.grid(row=0, column=1, sticky="w")
-        ttk.Radiobutton(region_frame, text="US (American English)", variable=self.region_var, value="US").pack(anchor="w")
-        ttk.Radiobutton(region_frame, text="UK (British English)", variable=self.region_var, value="UK").pack(anchor="w")
+        self.body = ctk.CTkFrame(self, fg_color="transparent")
+        self.body.grid(row=1, column=0, sticky="nsew", padx=28, pady=18)
+        self.body.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(1, weight=1)
 
-        ttk.Label(self, text="TTS speed").grid(row=1, column=0, sticky="w", pady=6)
-        ttk.Spinbox(self, from_=0.5, to=2.0, increment=0.1, textvariable=self.speed_var, width=8).grid(row=1, column=1, sticky="w")
+    def field(self, row, label):
+        ctk.CTkLabel(self.body, text=label, anchor="w").grid(
+            row=row, column=0, sticky="w", pady=10, padx=(0, 18)
+        )
 
-        ttk.Label(self, text="Male voice volume").grid(row=2, column=0, sticky="w", pady=6)
-        ttk.Spinbox(self, from_=0.0, to=2.0, increment=0.1, textvariable=self.male_volume_var, width=8).grid(row=2, column=1, sticky="w")
+    def slider(self, row, label, value, from_, to):
+        self.field(row, label)
+        holder = ctk.CTkFrame(self.body, fg_color="transparent")
+        holder.grid(row=row, column=1, sticky="ew")
+        holder.grid_columnconfigure(0, weight=1)
 
-        ttk.Label(self, text="Female voice volume").grid(row=3, column=0, sticky="w", pady=6)
-        ttk.Spinbox(self, from_=0.0, to=2.0, increment=0.1, textvariable=self.female_volume_var, width=8).grid(row=3, column=1, sticky="w")
+        readout = ctk.CTkLabel(holder, text=f"{value:.1f}", width=34)
+        readout.grid(row=0, column=1, padx=(12, 0))
 
-        ttk.Label(self, text="Audio output device").grid(row=4, column=0, sticky="w", pady=6)
-        ttk.Combobox(
-            self, textvariable=self.audio_device_var,
-            values=["auto"] + list_output_devices(), width=32,
-        ).grid(row=4, column=1, sticky="w")
-        ttk.Label(
-            self, text="\"auto\" picks pipewire/pulse over the generic ALSA default.\nOnly change this if audio doesn't play or comes out the wrong device.",
-            justify="left", foreground="gray",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        var = tk.DoubleVar(value=value)
+        ctk.CTkSlider(
+            holder, from_=from_, to=to, variable=var, number_of_steps=int((to - from_) * 20),
+            command=lambda v: readout.configure(text=f"{float(v):.1f}"),
+        ).grid(row=0, column=0, sticky="ew")
+        return var
 
-        ttk.Button(self, text="Save", command=self.save).grid(row=6, column=0, columnspan=2, pady=16)
+    def save_button(self, row, command, text="Save"):
+        ctk.CTkButton(self.body, text=text, command=command, height=38, width=130).grid(
+            row=row, column=0, columnspan=2, pady=(28, 0)
+        )
+
+
+class GeneralScreen(Screen):
+    title = "General"
+    subtitle = "Language and how loud each voice speaks."
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        settings = load_settings()
+
+        self.field(0, "Region")
+        self.region = ctk.CTkSegmentedButton(
+            self.body, values=["US", "UK"], width=200,
+        )
+        self.region.set(settings.get("region", "US"))
+        self.region.grid(row=0, column=1, sticky="w")
+
+        self.speed = self.slider(1, "Speech speed", settings.get("speed", 1.0), 0.5, 2.0)
+        self.male_volume = self.slider(2, "Male volume", settings.get("malevolume", 0.7), 0.0, 2.0)
+        self.female_volume = self.slider(3, "Female volume", settings.get("femalevolume", 0.7), 0.0, 2.0)
+
+        self.save_button(4, self.save)
 
     def save(self):
+        update_settings(
+            region=self.region.get(),
+            speed=round(self.speed.get(), 2),
+            malevolume=round(self.male_volume.get(), 2),
+            femalevolume=round(self.female_volume.get(), 2),
+        )
+        messagebox.showinfo("Saved", "General settings saved.")
+
+
+class AudioScreen(Screen):
+    title = "Audio"
+    subtitle = "Where the speech is played. Use Test sound to check it before saving."
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        settings = load_settings()
+
+        self.field(0, "Output device")
+        self.device = ctk.CTkComboBox(
+            self.body, values=["auto"] + audio_output.output_device_names(), width=340,
+        )
+        self.device.set(settings.get("audio_device", "auto"))
+        self.device.grid(row=0, column=1, sticky="ew")
+
+        ctk.CTkLabel(
+            self.body,
+            text='"auto" prefers pipewire/pulse over the generic ALSA default.\n'
+                 "Only change this if you hear nothing, or sound comes out of the wrong device.",
+            font=ctk.CTkFont(size=11), text_color=("gray45", "gray60"),
+            anchor="w", justify="left",
+        ).grid(row=1, column=1, sticky="w", pady=(6, 0))
+
+        buttons = ctk.CTkFrame(self.body, fg_color="transparent")
+        buttons.grid(row=2, column=0, columnspan=2, pady=(28, 0))
+        ctk.CTkButton(
+            buttons, text="Test sound", command=self.test, height=38, width=130,
+            fg_color="transparent", border_width=1,
+        ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(buttons, text="Save", command=self.save, height=38, width=130).pack(side="left")
+
+        self.status = ctk.CTkLabel(self.body, text="", anchor="w", justify="left")
+        self.status.grid(row=3, column=0, columnspan=2, sticky="w", pady=(16, 0))
+
+    def test(self):
         try:
-            self.settings["region"] = self.region_var.get()
-            self.settings["speed"] = float(self.speed_var.get())
-            self.settings["malevolume"] = float(self.male_volume_var.get())
-            self.settings["femalevolume"] = float(self.female_volume_var.get())
-            self.settings["audio_device"] = self.audio_device_var.get().strip() or "auto"
-            save_settings(self.settings)
-        except (tk.TclError, ValueError) as exc:
-            messagebox.showerror("Invalid value", str(exc))
+            used = audio_output.play_test_tone(self.device.get())
+        except Exception as exc:
+            self.status.configure(text=f"Could not play through this device:\n{exc}", text_color="#e04f4f")
             return
-        messagebox.showinfo("Saved", "Settings saved.")
-
-
-class NamePronunciationTab(ttk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent, padding=16)
-
-        ttk.Label(
-            self,
-            text=(
-                "Ask ChatGPT how to pronounce your in-game name using the IPA alphabet,\n"
-                "e.g. \"Minhaka\" -> \"miˈɲaka\". You can test pronunciations at ipa-reader.com."
-            ),
-            justify="left",
-        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
-
-        ttk.Label(self, text="In-game name").grid(row=1, column=0, sticky="w", pady=6)
-        self.name_var = tk.StringVar()
-        ttk.Entry(self, textvariable=self.name_var, width=30).grid(row=1, column=1, sticky="w")
-
-        ttk.Label(self, text="IPA pronunciation").grid(row=2, column=0, sticky="w", pady=6)
-        self.pronunciation_var = tk.StringVar()
-        ttk.Entry(self, textvariable=self.pronunciation_var, width=30).grid(row=2, column=1, sticky="w")
-
-        ttk.Button(self, text="Save", command=self.save).grid(row=3, column=0, columnspan=2, pady=16)
+        self.status.configure(text=f"Played a test tone through: {used}", text_color=("gray30", "gray70"))
 
     def save(self):
-        name = self.name_var.get().strip()
-        pronunciation = self.pronunciation_var.get().strip()
+        update_settings(audio_device=self.device.get().strip() or "auto")
+        messagebox.showinfo("Saved", "Audio device saved.")
+
+
+class NameScreen(Screen):
+    title = "Name Pronunciation"
+    subtitle = "Teach the TTS how to say your character's name."
+
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        ctk.CTkLabel(
+            self.body,
+            text="Ask ChatGPT how to pronounce your name in the IPA alphabet,\n"
+                 'e.g. "Minhaka" becomes "miˈɲaka". Test it at ipa-reader.com.',
+            font=ctk.CTkFont(size=12), text_color=("gray45", "gray60"),
+            anchor="w", justify="left",
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 16))
+
+        self.field(1, "In-game name")
+        self.name = ctk.CTkEntry(self.body, width=280, placeholder_text="Minhaka")
+        self.name.grid(row=1, column=1, sticky="ew")
+
+        self.field(2, "IPA pronunciation")
+        self.pronunciation = ctk.CTkEntry(self.body, width=280, placeholder_text="miˈɲaka")
+        self.pronunciation.grid(row=2, column=1, sticky="ew")
+
+        self.save_button(3, self.save)
+
+    def save(self):
+        name = self.name.get().strip()
+        pronunciation = self.pronunciation.get().strip()
         if not name or not pronunciation:
             messagebox.showerror("Missing value", "Both name and pronunciation are required.")
             return
-        content = build_name_lexicon(name, pronunciation)
         os.makedirs(os.path.dirname(NAME_LEXICON_PATH), exist_ok=True)
         with open(NAME_LEXICON_PATH, "w", encoding="utf-8") as f:
-            f.write(content)
+            f.write(build_name_lexicon(name, pronunciation))
         messagebox.showinfo("Saved", "Name pronunciation saved.")
 
 
 class VoiceRow:
     def __init__(self, parent, on_remove, person="", voice=""):
-        self.frame = ttk.Frame(parent)
-        self.person_var = tk.StringVar(value=person)
-        self.voice_var = tk.StringVar(value=voice)
+        self.frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.frame.pack(fill="x", pady=3)
 
-        ttk.Entry(self.frame, textvariable=self.person_var, width=28).pack(side="left", padx=(0, 8))
-        ttk.Combobox(self.frame, textvariable=self.voice_var, values=ALL_VOICES, width=14).pack(side="left", padx=(0, 8))
-        ttk.Button(self.frame, text="Remove", command=lambda: on_remove(self)).pack(side="left")
+        self.person = ctk.CTkEntry(self.frame, width=210, placeholder_text="Character name")
+        self.person.insert(0, person)
+        self.person.pack(side="left", padx=(0, 8))
 
-        self.frame.pack(fill="x", pady=2)
+        self.voice = ctk.CTkComboBox(self.frame, values=ALL_VOICES, width=150)
+        self.voice.set(voice or ALL_VOICES[0])
+        self.voice.pack(side="left", padx=(0, 8))
+
+        ctk.CTkButton(
+            self.frame, text="✕", width=32, command=lambda: on_remove(self),
+            fg_color="transparent", border_width=1, hover_color=("#e5c5c5", "#5a3535"),
+        ).pack(side="left")
 
     def values(self):
-        return self.person_var.get(), self.voice_var.get()
+        return self.person.get(), self.voice.get()
 
     def destroy(self):
         self.frame.destroy()
 
 
-class VoiceAssignmentsTab(ttk.Frame):
+class VoicesScreen(Screen):
+    title = "Voice Assignments"
+    subtitle = "Give specific characters their own voice."
+
     def __init__(self, parent):
-        super().__init__(parent, padding=16)
+        super().__init__(parent)
         self.rows = []
 
-        canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
-        self.rows_frame = ttk.Frame(canvas)
-        self.rows_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=self.rows_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+        self.rows_frame = ctk.CTkScrollableFrame(self.body, fg_color=("gray92", "gray17"))
+        self.rows_frame.grid(row=0, column=0, columnspan=2, sticky="nsew")
+        self.body.grid_rowconfigure(0, weight=1)
+        self.body.grid_columnconfigure(0, weight=1)
 
-        canvas.pack(side="top", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        buttons = ctk.CTkFrame(self.body, fg_color="transparent")
+        buttons.grid(row=1, column=0, columnspan=2, sticky="w", pady=(16, 0))
+        ctk.CTkButton(
+            buttons, text="+ Add character", command=self.add_row, height=38, width=150,
+            fg_color="transparent", border_width=1,
+        ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(buttons, text="Save", command=self.save, height=38, width=130).pack(side="left")
 
-        button_bar = ttk.Frame(self)
-        button_bar.pack(side="bottom", fill="x", pady=12)
-        ttk.Button(button_bar, text="Add character", command=self.add_row).pack(side="left")
-        ttk.Button(button_bar, text="Save", command=self.save).pack(side="left", padx=8)
-
-        for person, voice in flatten_voices(load_voices()):
-            self.add_row(person, voice)
+        try:
+            for person, voice in flatten_voices(load_voices()):
+                self.add_row(person, voice)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Could not read voices.json", str(exc))
 
     def add_row(self, person="", voice=""):
-        row = VoiceRow(self.rows_frame, self.remove_row, person, voice)
-        self.rows.append(row)
+        self.rows.append(VoiceRow(self.rows_frame, self.remove_row, person, voice))
 
     def remove_row(self, row):
         self.rows.remove(row)
         row.destroy()
 
     def save(self):
-        rows = [row.values() for row in self.rows]
-        save_voices(regroup_voices(rows))
+        save_voices(regroup_voices([row.values() for row in self.rows]))
         messagebox.showinfo("Saved", "Voice assignments saved.")
 
 
-class SettingsApp(tk.Tk):
+class SettingsApp(ctk.CTk):
+    SCREENS = (
+        ("General", GeneralScreen),
+        ("Name", NameScreen),
+        ("Voices", VoicesScreen),
+        ("Audio", AudioScreen),
+    )
+
     def __init__(self):
         super().__init__()
         self.title("FFXIV TTS Settings")
-        self.geometry("520x480")
+        self.geometry("780x580")
+        self.minsize(680, 520)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill="both", expand=True)
-        notebook.add(GeneralTab(notebook), text="General")
-        notebook.add(NamePronunciationTab(notebook), text="Name Pronunciation")
-        notebook.add(VoiceAssignmentsTab(notebook), text="Voice Assignments")
+        sidebar = ctk.CTkFrame(self, width=170, corner_radius=0)
+        sidebar.grid(row=0, column=0, sticky="nsw")
+        sidebar.grid_rowconfigure(len(self.SCREENS) + 1, weight=1)
+        sidebar.grid_propagate(False)
+
+        ctk.CTkLabel(
+            sidebar, text="FFXIV TTS", font=ctk.CTkFont(size=17, weight="bold"),
+        ).grid(row=0, column=0, padx=20, pady=(24, 20))
+
+        self.screens = {}
+        self.nav_buttons = {}
+        for i, (name, screen_class) in enumerate(self.SCREENS, start=1):
+            button = ctk.CTkButton(
+                sidebar, text=name, anchor="w", height=38, corner_radius=8,
+                command=lambda n=name: self.show(n),
+            )
+            button.grid(row=i, column=0, padx=12, pady=3, sticky="ew")
+            self.nav_buttons[name] = button
+
+            screen = screen_class(self)
+            screen.grid(row=0, column=1, sticky="nsew")
+            self.screens[name] = screen
+
+        ctk.CTkLabel(sidebar, text="Appearance", font=ctk.CTkFont(size=11), anchor="w").grid(
+            row=len(self.SCREENS) + 2, column=0, padx=20, sticky="w"
+        )
+        appearance = ctk.CTkOptionMenu(
+            sidebar, values=["System", "Dark", "Light"], width=140,
+            command=ctk.set_appearance_mode,
+        )
+        appearance.grid(row=len(self.SCREENS) + 3, column=0, padx=12, pady=(4, 20))
+
+        self.show(self.SCREENS[0][0])
+
+    def show(self, name):
+        self.screens[name].tkraise()
+        for screen_name, button in self.nav_buttons.items():
+            button.configure(
+                fg_color=("gray75", "gray25") if screen_name == name else "transparent"
+            )
 
 
 if __name__ == "__main__":
+    ctk.set_appearance_mode("System")
+    ctk.set_default_color_theme("blue")
     SettingsApp().mainloop()

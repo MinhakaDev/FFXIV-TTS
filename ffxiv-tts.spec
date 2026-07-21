@@ -15,14 +15,24 @@ block_cipher = None
 # so PyInstaller's import-tracing never finds them on its own. Explicitly collect each one's
 # data. en_core_web_sm itself is fetched at build time via `spacy download` (see build.sh /
 # build.bat / the CI workflow) since it isn't a normal pip dependency.
-datas = []
-binaries = []
-hiddenimports = []
-for pkg in ('kokoro', 'misaki', 'phonemizer', 'segments', 'csvw', 'language_tags', 'espeakng_loader', 'en_core_web_sm'):
-    pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(pkg)
-    datas += pkg_datas
-    binaries += pkg_binaries
-    hiddenimports += pkg_hiddenimports
+def collect_packages(*packages):
+    datas, binaries, hiddenimports = [], [], []
+    for pkg in packages:
+        pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(pkg)
+        datas += pkg_datas
+        binaries += pkg_binaries
+        hiddenimports += pkg_hiddenimports
+    return datas, binaries, hiddenimports
+
+
+datas, binaries, hiddenimports = collect_packages(
+    'kokoro', 'misaki', 'phonemizer', 'segments', 'csvw', 'language_tags',
+    'espeakng_loader', 'en_core_web_sm',
+)
+
+# customtkinter ships its widget themes as .json files loaded by path at runtime,
+# so the settings GUI needs them collected the same way.
+gui_datas, gui_binaries, gui_hiddenimports = collect_packages('customtkinter')
 
 main_a = Analysis(
     ['src/main.py'],
@@ -50,9 +60,9 @@ main_exe = EXE(
 gui_a = Analysis(
     ['src/settings_gui.py'],
     pathex=['src'],
-    binaries=[],
-    datas=[],
-    hiddenimports=[],
+    binaries=gui_binaries,
+    datas=gui_datas,
+    hiddenimports=gui_hiddenimports,
     hookspath=[],
     runtime_hooks=[],
     excludes=[],
