@@ -13,6 +13,21 @@ def normalize_device_name(name):
     return re.sub(r'\s*\(hw:\d+,\d+\)\s*$', '', name).strip().lower()
 
 
+def refresh_devices():
+    """Re-scan the system for audio devices.
+
+    PortAudio caches its device list when the library initialises, so a wireless
+    headset that is switched on (or wakes from sleep) after launch stays invisible
+    until it is re-initialised.
+    """
+    try:
+        sd._terminate()
+        sd._initialize()
+        return True
+    except Exception:
+        return False
+
+
 def output_devices():
     return [(i, d) for i, d in enumerate(sd.query_devices()) if d['max_output_channels'] > 0]
 

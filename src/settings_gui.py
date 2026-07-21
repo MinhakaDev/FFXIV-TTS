@@ -32,6 +32,7 @@ DEFAULT_SETTINGS = {
     "malevolume": 0.7,
     "femalevolume": 0.7,
     "audio_device": "auto",
+    "appearance": "Dark",
 }
 
 
@@ -199,16 +200,25 @@ class AudioScreen(Screen):
         settings = load_settings()
 
         self.field(0, "Output device")
-        self.device = ctk.CTkComboBox(
-            self.body, values=["auto"] + audio_output.output_device_names(), width=340,
-        )
+        picker = ctk.CTkFrame(self.body, fg_color="transparent")
+        picker.grid(row=0, column=1, sticky="ew")
+        picker.grid_columnconfigure(0, weight=1)
+
+        self.device = ctk.CTkComboBox(picker, values=self.device_choices(), width=290)
         self.device.set(settings.get("audio_device", "auto"))
-        self.device.grid(row=0, column=1, sticky="ew")
+        self.device.grid(row=0, column=0, sticky="ew")
+        ctk.CTkButton(
+            picker, text="Refresh", command=self.refresh, width=80, height=28,
+            fg_color="transparent", border_width=1,
+        ).grid(row=0, column=1, padx=(8, 0))
 
         ctk.CTkLabel(
             self.body,
             text='"auto" prefers pipewire/pulse over the generic ALSA default.\n'
-                 "Only change this if you hear nothing, or sound comes out of the wrong device.",
+                 "Headset missing? Switch it on, then press Refresh - it is only detected\n"
+                 "if it was already awake. Wireless headsets often sleep on their own.\n"
+                 "You can also pick pipewire/pulse and choose the headset in your\n"
+                 "system's sound settings instead.",
             font=ctk.CTkFont(size=11), text_color=("gray45", "gray60"),
             anchor="w", justify="left",
         ).grid(row=1, column=1, sticky="w", pady=(6, 0))
@@ -223,6 +233,23 @@ class AudioScreen(Screen):
 
         self.status = ctk.CTkLabel(self.body, text="", anchor="w", justify="left")
         self.status.grid(row=3, column=0, columnspan=2, sticky="w", pady=(16, 0))
+
+    def device_choices(self):
+        return ["auto"] + audio_output.output_device_names()
+
+    def refresh(self):
+        selected = self.device.get()
+        audio_output.refresh_devices()
+        choices = self.device_choices()
+        self.device.configure(values=choices)
+        # Keep the current pick if it survived the rescan, so refreshing doesn't
+        # silently reset a device the user already chose.
+        self.device.set(selected if selected in choices else "auto")
+        found = len(choices) - 1
+        self.status.configure(
+            text=f"Found {found} output device{'s' if found != 1 else ''}.",
+            text_color=("gray30", "gray70"),
+        )
 
     def test(self):
         try:
@@ -381,12 +408,17 @@ class SettingsApp(ctk.CTk):
             row=len(self.SCREENS) + 2, column=0, padx=20, sticky="w"
         )
         appearance = ctk.CTkOptionMenu(
-            sidebar, values=["System", "Dark", "Light"], width=140,
-            command=ctk.set_appearance_mode,
+            sidebar, values=["Dark", "Light", "System"], width=140,
+            command=self.set_appearance,
         )
+        appearance.set(load_settings().get("appearance", "Dark"))
         appearance.grid(row=len(self.SCREENS) + 3, column=0, padx=12, pady=(4, 20))
 
         self.show(self.SCREENS[0][0])
+
+    def set_appearance(self, mode):
+        ctk.set_appearance_mode(mode)
+        update_settings(appearance=mode)
 
     def show(self, name):
         self.screens[name].tkraise()
@@ -397,6 +429,6 @@ class SettingsApp(ctk.CTk):
 
 
 if __name__ == "__main__":
-    ctk.set_appearance_mode("System")
+    ctk.set_appearance_mode(load_settings().get("appearance", "Dark"))
     ctk.set_default_color_theme("blue")
     SettingsApp().mainloop()
