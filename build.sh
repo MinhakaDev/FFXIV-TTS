@@ -34,4 +34,4 @@ else
     cp -r settings dist/settings
 fi
 
-echo "Build ready in dist/: ffxiv-tts, ffxiv-tts-settings, settings/, lexicons/"
+echo "Build ready in dist/: ffxiv-tts, settings/, lexicons/"

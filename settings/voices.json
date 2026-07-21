@@ -1,59 +1,125 @@
 {
-  "male": {
-    "bm_fable": [
-      "alphinaud",
-      "thancred",
-      "cid"
-    ],
-    "bm_daniel": [
-      "wuk lamat",
-      "moren",
-      "emet-selch"
-    ],
-    "bm_lewis": [
-      "urianger"
-    ],
-    "am_fenrir": [
-      "erenville",
-      "raubahn",
-      "crystal exarch"
-    ],
-    "am_puck": [
-      "zero"
-    ],
-    "am_michael": [
-      "hien",
-      "elidibus"
-    ],
-    "zm_yunjian": [
-      "gosetsu"
-    ],
-    "bm_george": [
-    ]
+  "A Realm Reborn": {
+    "alisaie": "bf_emma",
+    "alphinaud": "bm_fable",
+    "cid": "bm_fable",
+    "g'raha tia": "bf_isabella",
+    "gaius van baelsar": "am_puck",
+    "hydaelyn": "af_bella",
+    "igeyorhm": "af_nova",
+    "kan-e-senna": "af_aoede",
+    "krile": "bf_lily",
+    "lahabrea": "bm_george",
+    "livia sas junius": "af_jessica",
+    "lolorito": "am_echo",
+    "louisoix": "bm_george",
+    "merlwyb": "af_kore",
+    "minfilia": "af_heart",
+    "moenbryda": "af_alloy",
+    "nabriales": "am_liam",
+    "nanamo ul namo": "af_sarah",
+    "nero tol scaeva": "am_eric",
+    "papalymo": "am_michael",
+    "raubahn": "am_fenrir",
+    "rhitahtyn sas arvina": "am_onyx",
+    "tataru": "af_nicole",
+    "thancred": "bm_fable",
+    "urianger": "bm_lewis",
+    "y'shtola": "bf_alice",
+    "yda": "af_nicole"
   },
-
-  "female": {
-    "bf_emma": [
-      "alisaie"
-    ],
-    "bf_alice": [
-      "y'shtola"
-    ],
-    "bf_isabella": [
-      "g'raha tia"
-    ],
-    "bf_lily": [
-      "krile"
-    ],
-    "af_heart": [
-      "lyse",
-      "ryne",
-      "minfilia"
-    ],
-    "af_bella": [
-      "estinien",
-      "yugiri",
-      "lyna"
-    ]
+  "Heavensward": {
+    "artoirel": "am_eric",
+    "aymeric": "am_fenrir",
+    "edmont": "bm_lewis",
+    "emmanellain": "am_liam",
+    "estinien": "af_bella",
+    "haurchefant": "am_puck",
+    "hilda": "af_kore",
+    "hraesvelgr": "bm_lewis",
+    "ilberd": "am_onyx",
+    "lucia": "af_sarah",
+    "midgardsormr": "bm_george",
+    "nidhogg": "bm_george",
+    "thordan": "bm_fable",
+    "vidofnir": "af_alloy",
+    "ysayle": "af_nicole"
+  },
+  "Stormblood": {
+    "arenvald": "am_echo",
+    "asahi": "am_eric",
+    "cirina": "af_nova",
+    "conrad": "am_onyx",
+    "fordola": "af_kore",
+    "gosetsu": "zm_yunjian",
+    "hien": "am_michael",
+    "lyse": "af_heart",
+    "m'naago": "af_alloy",
+    "magnai": "bm_george",
+    "maxima": "bm_daniel",
+    "pipin": "am_liam",
+    "sadu": "af_sky",
+    "varis zos galvus": "am_puck",
+    "yotsuyu": "af_nicole",
+    "yugiri": "af_bella",
+    "zenos": "am_fenrir"
+  },
+  "Shadowbringers": {
+    "anogg": "af_river",
+    "ardbert": "am_puck",
+    "beq lugg": "am_echo",
+    "chai-nuzz": "am_liam",
+    "crystal exarch": "am_fenrir",
+    "cylva": "af_nova",
+    "dulia-chai": "af_jessica",
+    "elidibus": "am_michael",
+    "emet-selch": "bm_daniel",
+    "feo ul": "af_sky",
+    "gaia": "af_kore",
+    "hythlodaeus": "bm_fable",
+    "konogg": "am_santa",
+    "lyna": "af_bella",
+    "ran'jit": "am_onyx",
+    "runar": "am_eric",
+    "ryne": "af_heart",
+    "titania": "af_river",
+    "vauthry": "bm_george"
+  },
+  "Endwalker": {
+    "ameliance": "af_sarah",
+    "amon": "bm_fable",
+    "ericthonios": "am_eric",
+    "fandaniel": "bm_fable",
+    "fourchenault": "bm_lewis",
+    "golbez": "bm_george",
+    "hermes": "am_michael",
+    "jullus": "am_liam",
+    "meteion": "af_nicole",
+    "moren": "bm_daniel",
+    "nidhana": "af_alloy",
+    "quintus": "am_onyx",
+    "varshahn": "am_fenrir",
+    "venat": "af_bella",
+    "vrtra": "am_fenrir",
+    "zero": "am_puck"
+  },
+  "Dawntrail": {
+    "alayla": "af_alloy",
+    "bakool ja ja": "bm_fable",
+    "cahciua": "af_sarah",
+    "calyx": "am_eric",
+    "erenville": "am_fenrir",
+    "gulool ja": "am_santa",
+    "gulool ja ja": "bm_george",
+    "halmarut": "am_onyx",
+    "koana": "am_michael",
+    "miayli": "af_jessica",
+    "otis": "bm_lewis",
+    "shale": "am_liam",
+    "sphene": "af_bella",
+    "teeshal ja": "am_echo",
+    "wuk lamat": "bm_daniel",
+    "zelenia": "af_kore",
+    "zoraal ja": "am_puck"
   }
 }

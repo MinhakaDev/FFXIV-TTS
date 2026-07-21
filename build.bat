@@ -18,7 +18,7 @@ if exist dist\settings (
     xcopy /E /I /Y settings dist\settings
 )
 
-echo Build ready in dist\: ffxiv-tts.exe, ffxiv-tts-settings.exe, settings\, lexicons\
+echo Build ready in dist\: ffxiv-tts.exe, settings\, lexicons\
 goto :eof
 
 :error

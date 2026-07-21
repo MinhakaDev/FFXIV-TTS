@@ -25,6 +25,15 @@ jobs:
       - name: Work out the next version
         id: next
         run: |
+          # A tag already on this commit wins, so a minor/major bump is just
+          # "git tag v0.2.0 && git push origin v0.2.0" before pushing main.
+          pinned=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+          if [ -n "$pinned" ]; then
+            echo "tag=$pinned" >> "$GITHUB_OUTPUT"
+            echo "Commit is already tagged. Releasing: $pinned"
+            exit 0
+          fi
+
           latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)
           if [ -z "$latest" ]; then
             next="v0.1.0"

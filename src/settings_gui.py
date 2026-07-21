@@ -1,5 +1,7 @@
 import json
 import os
+import queue
+import sys
 import tkinter as tk
 from tkinter import messagebox
 
@@ -7,20 +9,12 @@ import customtkinter as ctk
 
 import audio as audio_output
 import paths
+import tts
+import voices as voice_data
 
-KNOWN_VOICES = {
-    "female": [
-        "af_alloy", "af_aoede", "af_bella", "af_heart", "af_jessica", "af_kore",
-        "af_nicole", "af_nova", "af_river", "af_sarah", "af_sky",
-        "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
-    ],
-    "male": [
-        "am_adam", "am_echo", "am_eric", "am_fenrir", "am_liam", "am_michael",
-        "am_onyx", "am_puck", "am_santa",
-        "bm_daniel", "bm_fable", "bm_george", "bm_lewis",
-    ],
-}
-ALL_VOICES = sorted(KNOWN_VOICES["female"] + KNOWN_VOICES["male"])
+# Females first, then males, best grade first within each - so the picker is grouped
+# by gender and the better-sounding voices are nearest the top.
+VOICE_CHOICES = [voice_data.describe_voice(v) for v in voice_data.voice_options()]
 
 SETTINGS_PATH = os.path.join(paths.settings_dir(), "settings.json")
 VOICES_PATH = os.path.join(paths.settings_dir(), "voices.json")
@@ -57,39 +51,27 @@ def update_settings(**changes):
     return settings
 
 
-def load_voices():
-    with open(VOICES_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+def load_records():
+    """voices.json as a flat, editable list of {expansion, person, voice}."""
+    data = voice_data.load(VOICES_PATH)
+    records = []
+    for expansion in sorted(
+        data, key=lambda e: voice_data.EXPANSIONS.index(e) if e in voice_data.EXPANSIONS else len(voice_data.EXPANSIONS)
+    ):
+        for person, voice in sorted(data[expansion].items()):
+            records.append({"expansion": expansion, "person": person, "voice": voice})
+    return records
 
 
-def save_voices(voices):
-    with open(VOICES_PATH, "w", encoding="utf-8") as f:
-        json.dump(voices, f, indent=2)
-
-
-def flatten_voices(voices):
-    rows = []
-    for gender_data in voices.values():
-        for voice, people in gender_data.items():
-            for person in people:
-                rows.append((person, voice))
-    rows.sort(key=lambda row: row[0].lower())
-    return rows
-
-
-def classify_gender(voice):
-    return "female" if voice.startswith(("af_", "bf_")) else "male"
-
-
-def regroup_voices(rows):
-    voices = {"male": {}, "female": {}}
-    for person, voice in rows:
-        person = person.strip()
-        voice = voice.strip()
+def save_records(records):
+    data = {}
+    for record in records:
+        person = record["person"].strip()
+        voice = record["voice"].strip()
         if not person or not voice:
             continue
-        voices[classify_gender(voice)].setdefault(voice, []).append(person)
-    return voices
+        data.setdefault(record["expansion"], {})[person] = voice
+    voice_data.save(VOICES_PATH, data)
 
 
 def build_name_lexicon(name, pronunciation):
@@ -105,6 +87,34 @@ def build_name_lexicon(name, pronunciation):
         <phoneme>{pronunciation}</phoneme>
     </lexeme>
 </lexicon>"""
+
+
+class LogStream:
+    """Tees writes to the on-screen log, keeping the real stream when there is one."""
+
+    def __init__(self, sink, original=None):
+        self.sink = sink
+        self.original = original
+        self._pending = ""
+
+    def write(self, text):
+        if self.original is not None:
+            try:
+                self.original.write(text)
+            except Exception:
+                pass
+        self._pending += text
+        while "\n" in self._pending:
+            line, self._pending = self._pending.split("\n", 1)
+            if line.strip():
+                self.sink(line)
+
+    def flush(self):
+        if self.original is not None:
+            try:
+                self.original.flush()
+            except Exception:
+                pass
 
 
 class Screen(ctk.CTkFrame):
@@ -158,6 +168,69 @@ class Screen(ctk.CTkFrame):
         ctk.CTkButton(self.body, text=text, command=command, height=38, width=130).grid(
             row=row, column=0, columnspan=2, pady=(28, 0)
         )
+
+
+class RunScreen(Screen):
+    title = "FFXIV TTS"
+    subtitle = "Start FFXIV and log in, then press Start."
+
+    def __init__(self, parent, service):
+        super().__init__(parent)
+        self.service = service
+        self.messages = queue.Queue()
+
+        self.status = ctk.CTkLabel(
+            self.body, text="Stopped", font=ctk.CTkFont(size=15, weight="bold"), anchor="w"
+        )
+        self.status.grid(row=0, column=0, sticky="w")
+
+        self.button = ctk.CTkButton(
+            self.body, text="Start", command=self.toggle, height=42, width=150,
+            font=ctk.CTkFont(size=14, weight="bold"),
+        )
+        self.button.grid(row=0, column=1, sticky="e")
+
+        self.log = ctk.CTkTextbox(
+            self.body, fg_color=("gray92", "gray14"), font=ctk.CTkFont(family="monospace", size=11),
+            wrap="word",
+        )
+        self.log.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(16, 0))
+        self.log.configure(state="disabled")
+        self.body.grid_rowconfigure(1, weight=1)
+        self.body.grid_columnconfigure(0, weight=1)
+
+        self.append("Press Start to begin. The speech model loads on the first run,")
+        self.append("which can take a minute and needs an internet connection.")
+        self.drain()
+
+    def append(self, line):
+        self.messages.put(line)
+
+    def drain(self):
+        """Tk isn't thread-safe, so log lines are queued and flushed on the UI thread."""
+        lines = []
+        while True:
+            try:
+                lines.append(self.messages.get_nowait())
+            except queue.Empty:
+                break
+        if lines:
+            self.log.configure(state="normal")
+            self.log.insert("end", "\n".join(lines) + "\n")
+            self.log.see("end")
+            self.log.configure(state="disabled")
+        self.after(150, self.drain)
+
+    def toggle(self):
+        if self.service.running:
+            self.append("Stopping...")
+            self.service.stop()
+        else:
+            self.service.start()
+
+    def set_running(self, running):
+        self.status.configure(text="Running" if running else "Stopped")
+        self.button.configure(text="Stop" if running else "Start")
 
 
 class GeneralScreen(Screen):
@@ -304,16 +377,19 @@ class NameScreen(Screen):
 
 
 class VoiceRow:
-    def __init__(self, parent, on_remove, person="", voice=""):
+    """One character's row. Edits are written straight back into its record."""
+
+    def __init__(self, parent, record, on_remove):
+        self.record = record
         self.frame = ctk.CTkFrame(parent, fg_color="transparent")
         self.frame.pack(fill="x", pady=3)
 
-        self.person = ctk.CTkEntry(self.frame, width=210, placeholder_text="Character name")
-        self.person.insert(0, person)
+        self.person = ctk.CTkEntry(self.frame, width=190, placeholder_text="Character name")
+        self.person.insert(0, record["person"])
         self.person.pack(side="left", padx=(0, 8))
 
-        self.voice = ctk.CTkComboBox(self.frame, values=ALL_VOICES, width=150)
-        self.voice.set(voice or ALL_VOICES[0])
+        self.voice = ctk.CTkComboBox(self.frame, values=VOICE_CHOICES, width=210)
+        self.voice.set(voice_data.describe_voice(record["voice"]))
         self.voice.pack(side="left", padx=(0, 8))
 
         ctk.CTkButton(
@@ -321,8 +397,9 @@ class VoiceRow:
             fg_color="transparent", border_width=1, hover_color=("#e5c5c5", "#5a3535"),
         ).pack(side="left")
 
-    def values(self):
-        return self.person.get(), self.voice.get()
+    def commit(self):
+        self.record["person"] = self.person.get()
+        self.record["voice"] = voice_data.voice_from_description(self.voice.get())
 
     def destroy(self):
         self.frame.destroy()
@@ -330,45 +407,94 @@ class VoiceRow:
 
 class VoicesScreen(Screen):
     title = "Voice Assignments"
-    subtitle = "Give specific characters their own voice."
+    subtitle = "Pick an expansion to find a character. Voices are graded A (best) to F."
+
+    ALL = "All expansions"
 
     def __init__(self, parent):
         super().__init__(parent)
         self.rows = []
+        try:
+            self.records = load_records()
+        except (OSError, ValueError) as exc:
+            self.records = []
+            messagebox.showerror("Could not read voices.json", str(exc))
+
+        picker = ctk.CTkFrame(self.body, fg_color="transparent")
+        picker.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
+        ctk.CTkLabel(picker, text="Expansion").pack(side="left", padx=(0, 10))
+        self.expansion = ctk.CTkOptionMenu(
+            picker, values=[self.ALL] + voice_data.EXPANSIONS, width=200,
+            command=lambda _: self.rebuild(),
+        )
+        self.expansion.set(voice_data.EXPANSIONS[0])
+        self.expansion.pack(side="left")
+        self.count = ctk.CTkLabel(picker, text="", text_color=("gray45", "gray60"))
+        self.count.pack(side="left", padx=(12, 0))
 
         self.rows_frame = ctk.CTkScrollableFrame(self.body, fg_color=("gray92", "gray17"))
-        self.rows_frame.grid(row=0, column=0, columnspan=2, sticky="nsew")
-        self.body.grid_rowconfigure(0, weight=1)
+        self.rows_frame.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        self.body.grid_rowconfigure(1, weight=1)
         self.body.grid_columnconfigure(0, weight=1)
 
         buttons = ctk.CTkFrame(self.body, fg_color="transparent")
-        buttons.grid(row=1, column=0, columnspan=2, sticky="w", pady=(16, 0))
+        buttons.grid(row=2, column=0, columnspan=2, sticky="w", pady=(16, 0))
         ctk.CTkButton(
-            buttons, text="+ Add character", command=self.add_row, height=38, width=150,
+            buttons, text="+ Add character", command=self.add_character, height=38, width=150,
             fg_color="transparent", border_width=1,
         ).pack(side="left", padx=(0, 10))
         ctk.CTkButton(buttons, text="Save", command=self.save, height=38, width=130).pack(side="left")
 
-        try:
-            for person, voice in flatten_voices(load_voices()):
-                self.add_row(person, voice)
-        except (OSError, ValueError) as exc:
-            messagebox.showerror("Could not read voices.json", str(exc))
+        self.rebuild()
 
-    def add_row(self, person="", voice=""):
-        self.rows.append(VoiceRow(self.rows_frame, self.remove_row, person, voice))
+    def commit_rows(self):
+        """Fold visible edits back into the records before the rows are discarded."""
+        for row in self.rows:
+            row.commit()
+
+    def visible_records(self):
+        selected = self.expansion.get()
+        if selected == self.ALL:
+            return self.records
+        return [r for r in self.records if r["expansion"] == selected]
+
+    def rebuild(self):
+        self.commit_rows()
+        for row in self.rows:
+            row.destroy()
+        # Only the selected expansion's rows exist as widgets; building all ~110 at
+        # once is slow enough to be visible when switching screens.
+        self.rows = [
+            VoiceRow(self.rows_frame, record, self.remove_row)
+            for record in self.visible_records()
+        ]
+        shown, total = len(self.rows), len(self.records)
+        self.count.configure(text=f"{shown} of {total} characters")
+
+    def add_character(self):
+        selected = self.expansion.get()
+        expansion = "Custom" if selected == self.ALL else selected
+        self.commit_rows()
+        self.records.append({"expansion": expansion, "person": "", "voice": "af_heart"})
+        if selected != expansion:
+            self.expansion.set(expansion)
+        self.rebuild()
 
     def remove_row(self, row):
+        self.records.remove(row.record)
         self.rows.remove(row)
         row.destroy()
+        self.count.configure(text=f"{len(self.rows)} of {len(self.records)} characters")
 
     def save(self):
-        save_voices(regroup_voices([row.values() for row in self.rows]))
+        self.commit_rows()
+        save_records(self.records)
         messagebox.showinfo("Saved", "Voice assignments saved.")
 
 
 class SettingsApp(ctk.CTk):
     SCREENS = (
+        ("Run", RunScreen),
         ("General", GeneralScreen),
         ("Name", NameScreen),
         ("Voices", VoicesScreen),
@@ -377,11 +503,13 @@ class SettingsApp(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        self.title("FFXIV TTS Settings")
-        self.geometry("780x580")
-        self.minsize(680, 520)
+        self.title("FFXIV TTS")
+        self.geometry("820x620")
+        self.minsize(700, 540)
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
+
+        self.service = tts.TTSService(on_state_change=self.on_service_state)
 
         sidebar = ctk.CTkFrame(self, width=170, corner_radius=0)
         sidebar.grid(row=0, column=0, sticky="nsw")
@@ -402,7 +530,7 @@ class SettingsApp(ctk.CTk):
             button.grid(row=i, column=0, padx=12, pady=3, sticky="ew")
             self.nav_buttons[name] = button
 
-            screen = screen_class(self)
+            screen = screen_class(self, self.service) if screen_class is RunScreen else screen_class(self)
             screen.grid(row=0, column=1, sticky="nsew")
             self.screens[name] = screen
 
@@ -416,7 +544,21 @@ class SettingsApp(ctk.CTk):
         appearance.set(load_settings().get("appearance", "Dark"))
         appearance.grid(row=len(self.SCREENS) + 3, column=0, padx=12, pady=(4, 20))
 
+        # Everything the runtime prints goes to the Run screen's log.
+        run_screen = self.screens["Run"]
+        sys.stdout = LogStream(run_screen.append, sys.stdout)
+        sys.stderr = LogStream(run_screen.append, sys.stderr)
+
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.show(self.SCREENS[0][0])
+
+    def on_service_state(self, running):
+        # Called from the service thread; hop back to the UI thread to touch widgets.
+        self.after(0, lambda: self.screens["Run"].set_running(running))
+
+    def on_close(self):
+        self.service.stop()
+        self.destroy()
 
     def set_appearance(self, mode):
         ctk.set_appearance_mode(mode)
@@ -430,7 +572,11 @@ class SettingsApp(ctk.CTk):
             )
 
 
-if __name__ == "__main__":
+def run():
     ctk.set_appearance_mode(load_settings().get("appearance", "Dark"))
     ctk.set_default_color_theme("blue")
     SettingsApp().mainloop()
+
+
+if __name__ == "__main__":
+    run()

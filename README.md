@@ -16,12 +16,15 @@ If you don't already have the FFXIV launcher installed and configured, follow th
 
 ### Option A: Download a release (recommended, no Python required)
 
-1. Download the latest release zip for your platform (`ffxiv-tts.exe` on Windows, `ffxiv-tts` on
-   Linux), which includes `ffxiv-tts-settings`, a `settings/` folder, and a `lexicons/` folder.
-2. Run `ffxiv-tts-settings` once to configure your region, speed, volumes, name pronunciation,
-   and character voice assignments (see [Settings](#settings)).
-3. Open FFXIV with the launcher and log in.
-4. Run `ffxiv-tts`.
+1. Download the latest release zip for your platform. It contains one app —
+   `ffxiv-tts.exe` on Windows, `ffxiv-tts` on Linux — plus a `settings/` folder and a
+   `lexicons/` folder. Keep all three together.
+2. Open FFXIV with the launcher and log in.
+3. Run the app and press **Start**. Everything else — voices, volumes, your name's
+   pronunciation, audio device — is in the same window (see [Settings](#settings)).
+
+The first Start downloads the speech model, so it takes a minute and needs an internet
+connection. After that it starts quickly and works offline.
 
 On Linux you'll also need the system audio libraries the binary links against:
 `sudo apt-get install portaudio19-dev libsndfile1 libasound2` (or your distro's equivalent —
@@ -38,8 +41,9 @@ app's device list, install the ALSA bridge for your sound server: `pipewire-alsa
 2. Download this GitHub repository.
 3. `pip install -r requirements.txt` (Linux also needs
    `sudo apt-get install portaudio19-dev libsndfile1` first).
-4. `python src/settings_gui.py` to configure your settings (see [Settings](#settings)).
-5. Open FFXIV with the launcher and log in, then `python src/main.py`.
+4. Open FFXIV with the launcher and log in, then `python src/main.py`.
+
+`python src/main.py --headless` runs the TTS on the console without opening a window.
 
 ---
 
@@ -48,8 +52,7 @@ Congratulations! Your setup is complete, and you can now start listening instead
 
 ---
 ## Settings
-`ffxiv-tts-settings` (or `python src/settings_gui.py` when running from source) opens a small GUI
-where you can customize:
+The app's sidebar has everything you can customize:
 - [x] The Pronunciation of Your Name.
 - [x] If you want British English or American English
 - [x] The speed at which the male and female voices speak
@@ -108,12 +111,12 @@ Then:
 ```bash
 source .venv/bin/activate
 ./build.sh
-./dist/ffxiv-tts            # or ./dist/ffxiv-tts-settings
+./dist/ffxiv-tts
 ```
 
 `build.sh` works with both plain and uv-created virtualenvs and keeps any settings you already
 configured in `dist/`. Faster still, for changes that aren't about packaging: run
-`python src/main.py` or `python src/settings_gui.py` directly and skip PyInstaller entirely.
+`python src/main.py` directly and skip PyInstaller entirely.
 
 PyInstaller doesn't cross-compile, so build on the OS you're targeting: `build.sh` on Linux for
 the Linux binary, `build.bat` on Windows for the `.exe`. That's the main reason to use the

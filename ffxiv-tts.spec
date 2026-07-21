@@ -1,9 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Build with: pyinstaller ffxiv-tts.spec
-# Produces dist/ffxiv-tts (the TTS runtime) and dist/ffxiv-tts-settings (the settings GUI).
+# Produces a single dist/ffxiv-tts holding both the settings screens and the TTS runtime.
 # settings/ and lexicons/ are NOT bundled here on purpose - they must ship as editable
-# folders next to the executables (see build.sh / build.bat), since settings_gui.py writes
-# to them at runtime.
+# folders next to the executable (see build.sh / build.bat), since the app writes to them
+# at runtime.
 
 import os
 
@@ -41,16 +41,14 @@ def collect_packages(*packages):
     return datas, binaries, hiddenimports
 
 
+# customtkinter ships its widget themes as .json files loaded by path at runtime, so it
+# needs collecting the same way.
 datas, binaries, hiddenimports = collect_packages(
     'kokoro', 'misaki', 'phonemizer', 'segments', 'csvw', 'language_tags',
-    'espeakng_loader', 'en_core_web_sm',
+    'espeakng_loader', 'en_core_web_sm', 'customtkinter',
 )
 
-# customtkinter ships its widget themes as .json files loaded by path at runtime,
-# so the settings GUI needs them collected the same way.
-gui_datas, gui_binaries, gui_hiddenimports = collect_packages('customtkinter')
-
-main_a = Analysis(
+analysis = Analysis(
     ['src/main.py'],
     pathex=['src'],
     binaries=binaries,
@@ -61,39 +59,18 @@ main_a = Analysis(
     excludes=[],
     cipher=block_cipher,
 )
-main_a.binaries = use_host_libraries(main_a.binaries)
-main_pyz = PYZ(main_a.pure, main_a.zipped_data, cipher=block_cipher)
-main_exe = EXE(
-    main_pyz,
-    main_a.scripts,
-    main_a.binaries,
-    main_a.zipfiles,
-    main_a.datas,
+analysis.binaries = use_host_libraries(analysis.binaries)
+pyz = PYZ(analysis.pure, analysis.zipped_data, cipher=block_cipher)
+
+# console=False so double-clicking doesn't leave a terminal window hanging around;
+# the app tees stdout into its own log panel instead.
+exe = EXE(
+    pyz,
+    analysis.scripts,
+    analysis.binaries,
+    analysis.zipfiles,
+    analysis.datas,
     [],
     name='ffxiv-tts',
-    console=True,
-)
-
-gui_a = Analysis(
-    ['src/settings_gui.py'],
-    pathex=['src'],
-    binaries=gui_binaries,
-    datas=gui_datas,
-    hiddenimports=gui_hiddenimports,
-    hookspath=[],
-    runtime_hooks=[],
-    excludes=[],
-    cipher=block_cipher,
-)
-gui_a.binaries = use_host_libraries(gui_a.binaries)
-gui_pyz = PYZ(gui_a.pure, gui_a.zipped_data, cipher=block_cipher)
-gui_exe = EXE(
-    gui_pyz,
-    gui_a.scripts,
-    gui_a.binaries,
-    gui_a.zipfiles,
-    gui_a.datas,
-    [],
-    name='ffxiv-tts-settings',
     console=False,
 )

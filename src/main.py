@@ -1,208 +1,45 @@
-import os
-import json
-import websocket
-from kokoro import KPipeline
-import numpy as np
-import sounddevice as sd
-import xml.etree.ElementTree as ET
-import time
+"""Entry point for the FFXIV TTS app.
 
-import audio as audio_output
-import paths
+Opens the window by default. Pass --headless to run the TTS on the console only,
+without a GUI (useful over SSH or for a machine with no display).
+"""
 
-from audio import KOKORO_SAMPLE_RATE
-
-# loading voices from the json file
-with open(os.path.join(paths.settings_dir(), "voices.json"), "r", encoding="utf-8") as f:
-    VOICES_BY_GENDER = json.load(f)
-    
-VOICE_LOOKUP = {}
-
-for gender_data in VOICES_BY_GENDER.values():
-    for voice, people in gender_data.items():
-        for person in people:
-            VOICE_LOOKUP[person.lower()] = voice
+import io
+import sys
 
 
-with open(os.path.join(paths.settings_dir(), "settings.json"), "r", encoding="utf-8") as f:
-    settings = json.load(f)
-if settings['region'] == "US":
-    reagionVoice = "a"
-    femaleVoice = 'af_heart'
-    maleVoice = 'am_puck'
-else:
-    reagionVoice = "b"
-    femaleVoice = 'bf_emma'
-    maleVoice = 'bm_fable'
-voiceSpeed = settings['speed']
-femaleVoiceVolume = settings['femalevolume']
-maleVoiceVolume = settings['malevolume']
-print(f"\n\nUsing Male Voice: {maleVoice} and Female voice: {femaleVoice}\n\n")
+def _ensure_streams():
+    """Give the process real stdout/stderr objects.
 
-aliases_dict = {}
-
-def parse_pls(filename):
-    lexicon = {}
-    try:
-        tree = ET.parse(filename)
-        root = tree.getroot()
-        
-        # Iterate over each lexeme in the PLS file
-        for lexeme in root.findall('{http://www.w3.org/2005/01/pronunciation-lexicon}lexeme'):
-            graphemes = [
-                grapheme.text.strip()
-                for grapheme in lexeme.findall('{http://www.w3.org/2005/01/pronunciation-lexicon}grapheme')
-                if grapheme.text is not None
-            ]
-            
-            phoneme_element = lexeme.find('{http://www.w3.org/2005/01/pronunciation-lexicon}phoneme')
-            phoneme = phoneme_element.text.strip() if phoneme_element is not None and phoneme_element.text else None
-            
-            alias_element = lexeme.find('{http://www.w3.org/2005/01/pronunciation-lexicon}alias')
-            alias = alias_element.text.strip() if alias_element is not None and alias_element.text else None
-            
-            # Add entries to the lexicon and aliases_dict
-            for grapheme in graphemes:
-                if phoneme:  # Only add to lexicon if phoneme exists
-                    lexicon[grapheme] = phoneme
-                if alias:  # Only add to aliases_dict if alias exists
-                    aliases_dict[grapheme] = alias
-    except Exception as e:
-        print(f"Error parsing PLS file {filename}: {e}")
-    
-    return lexicon
+    A windowed PyInstaller build has sys.stdout set to None, so any print() -
+    including ones inside torch and kokoro - would raise AttributeError.
+    """
+    if sys.stdout is None:
+        sys.stdout = io.StringIO()
+    if sys.stderr is None:
+        sys.stderr = sys.stdout
 
 
-def transform_string(input_string, aliases_dict):
-    # Split the string into words
-    words = input_string.split()
-    
-    # Transform words that match a grapheme in aliases_dict
-    transformed_words = [
-        aliases_dict[word] if word in aliases_dict else word
-        for word in words
-    ]
-    
-    # Join the words back into a string
-    transformed_string = ' '.join(transformed_words)
-    
-    return transformed_string
+def main():
+    _ensure_streams()
 
-def getVoice(person, currentVoice):
-    person = person.lower()
-    return VOICE_LOOKUP.get(person, currentVoice)
+    if "--headless" in sys.argv:
+        import tts
 
-# Directories containing PLS files
-pls_directories = [
-    os.path.join(paths.lexicons_dir(), 'Characters-Locations-System'),
-    os.path.join(paths.lexicons_dir(), 'Your-Name'),
-    os.path.join(paths.lexicons_dir(), 'Stutter-Replacers'),
-    os.path.join(paths.lexicons_dir(), 'Chat-FFXIV-Acronyms'),
-]
+        service = tts.TTSService()
+        service.start()
+        try:
+            while service.running:
+                service._thread.join(timeout=0.5)
+        except KeyboardInterrupt:
+            print("Stopping...")
+            service.stop()
+        return
 
+    import settings_gui
 
-try:
-    device_name, OUTPUT_SAMPLE_RATE = audio_output.activate_output_device(
-        settings.get('audio_device', 'auto'), on_warning=print
-    )
-    if device_name:
-        print(f"Using audio output device: {device_name}")
-except Exception as e:
-    print(f"Could not configure output device, defaulting to {KOKORO_SAMPLE_RATE}: {e}")
-    OUTPUT_SAMPLE_RATE = KOKORO_SAMPLE_RATE
+    settings_gui.run()
 
-
-# Configure Kokoro pipeline
-pipeline = KPipeline(lang_code=reagionVoice)
-
-for directory in pls_directories:
-    for root, _, files in os.walk(directory):
-        for file in files:
-            if file.endswith('.pls'):
-                pls_file_path = os.path.join(root, file)
-                print(f"Processing PLS file: {pls_file_path}")
-                custom_lexicon = parse_pls(pls_file_path)
-                pipeline.g2p.lexicon.golds.update(custom_lexicon)
-
-
-def on_open(ws):
-    print("Connected to WebSocket server")
-
-def on_message(ws, message):
-    try:
-        data = json.loads(message)
-
-        # stop audio if playing
-        if data.get('Type') == "Cancel":
-            print("skipping audio")
-            sd.stop()
-
-        if data.get('Type') == 'Say':
-            text = data.get('Payload', '')
-            print(f"\n{str(data)}\n")
-            personSpeaking = data.get('Speaker','').lower()
-
-            print(f"\n{personSpeaking}\n")
-            voice_type = data.get('Voice', {}).get('Name', '').lower()
-
-
-            payload = transform_string(text, aliases_dict)
-
-
-
-            print("Say Payload:", payload)
-            print("Voice:", voice_type or "Unknown")
-            print(f"Person: {personSpeaking}")
-
-            # Pick voice
-            voice = maleVoice
-            if voice_type == 'female':
-                voice = femaleVoice
-            voice = getVoice(personSpeaking,voice)
-            # Generate audio using Kokoro
-            generator = pipeline(payload, voice=voice, speed=voiceSpeed)
-            print(f"with voice {voice}")
-            # Stream the audio using sounddevice
-            for i, (gs, ps, audio) in enumerate(generator):
-                print(f"Streaming audio segment {i + 1}...")
-                audio = np.asarray(audio, dtype=np.float32)
-                adjusted_audio = audio * maleVoiceVolume
-                if voice == femaleVoice:
-                    adjusted_audio = audio * femaleVoiceVolume
-                adjusted_audio = audio_output.resample_audio(adjusted_audio, KOKORO_SAMPLE_RATE, OUTPUT_SAMPLE_RATE)
-                sd.play(adjusted_audio, samplerate=OUTPUT_SAMPLE_RATE)
-
-    except Exception as e:
-        print(f"Error parsing or processing message: {e}")
-
-def on_error(ws, error):
-    error_str = str(error)
-    if "10061" in error_str:
-        print("You didn't open FFXIV Launcher")
-        for i in range(5):
-            print(f"sleaping in {5-i}")
-            time.sleep(1)
-            i+=1
-    elif "10053" in error_str:
-        print("Error in Processing Request Reconecting ...")
-        connect()
-    else:
-        print(f"WebSocket error: {error}")
-
-def on_close(ws, close_status_code, close_msg):
-    print("WebSocket connection closed")
-
-
-def connect():
-    websocket_url = "ws://localhost:51363/Messages"
-    ws = websocket.WebSocketApp(
-        websocket_url,
-        on_open=on_open,
-        on_message=on_message,
-        on_error=on_error,
-        on_close=on_close
-    )
-    ws.run_forever()
 
 if __name__ == "__main__":
-    connect()
+    main()
