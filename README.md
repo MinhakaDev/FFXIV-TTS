@@ -1,5 +1,10 @@
 # FFXIV Launcher with TTS Setup Guide
 
+[![Latest release](https://img.shields.io/github/v/release/MinhakaDev/FFXIV-TTS)](https://github.com/MinhakaDev/FFXIV-TTS/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/MinhakaDev/FFXIV-TTS/total)](https://github.com/MinhakaDev/FFXIV-TTS/releases)
+[![License: MIT](https://img.shields.io/github/license/MinhakaDev/FFXIV-TTS)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-informational)
+
 This guide will help you set up the FFXIV Launcher with TTS (Text-to-Speech) and [kokoro-tts](https://github.com/nazdridoy/kokoro-tts) functionality.
 
 ---
