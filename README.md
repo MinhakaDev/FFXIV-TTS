@@ -19,7 +19,7 @@ If you don't already have the FFXIV launcher installed and configured, follow th
 1. Download the latest release zip for your platform. It contains one app —
    `ffxiv-tts.exe` on Windows, `ffxiv-tts` on Linux — plus a `settings/` folder and a
    `lexicons/` folder. Keep all three together.
-2. Open FFXIV with the launcher and log in.
+2. Open the [FFXIV Launcher](#how-to-install-and-configure-ffxiv-launcher) and log in.
 3. Run the app and press **Start**. Everything else — voices, volumes, your name's
    pronunciation, audio device — is in the same window (see [Settings](#settings)).
 
@@ -41,7 +41,7 @@ app's device list, install the ALSA bridge for your sound server: `pipewire-alsa
 2. Download this GitHub repository.
 3. `pip install -r requirements.txt` (Linux also needs
    `sudo apt-get install portaudio19-dev libsndfile1` first).
-4. Open FFXIV with the launcher and log in, then `python src/main.py`.
+4. Open the [FFXIV Launcher](#how-to-install-and-configure-ffxiv-launcher) and log in, then `python src/main.py`.
 
 `python src/main.py --headless` runs the TTS on the console without opening a window.
 
