@@ -22,11 +22,17 @@ from audio import KOKORO_SAMPLE_RATE
 
 WEBSOCKET_URL = "ws://localhost:51363/Messages"
 PLS_NAMESPACE = "{http://www.w3.org/2005/01/pronunciation-lexicon}"
+# Whitelist, not a directory scan: lexicons/ also holds packages that deliberately
+# contradict Characters-Locations-System (see the note in lexicons/README.md), and
+# they must stay inert unless someone opts in by adding them here. Order matters -
+# _load() merges these in sequence, so a later entry wins any grapheme collision.
 LEXICON_DIRECTORIES = (
     "Characters-Locations-System",
     "Your-Name",
     "Stutter-Replacers",
     "Chat-FFXIV-Acronyms",
+    "Unconfirmed-Name-Pronunciations",
+    "Americanize-pronunciations",
 )
 REGION_VOICES = {
     "US": ("a", "am_puck", "af_heart"),
