@@ -25,6 +25,12 @@ def main():
 
     if "--headless" in sys.argv:
         import tts
+        import updates
+
+        result = updates.check()
+        if result:
+            tag, url = result
+            print(f"Update available: {tag} (you have {updates.__version__}). Download: {url}")
 
         service = tts.TTSService()
         service.start()

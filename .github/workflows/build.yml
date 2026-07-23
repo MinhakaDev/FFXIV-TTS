@@ -75,6 +75,8 @@ jobs:
         run: |
           pip install -r requirements.txt -r requirements-build.txt
           python -m spacy download en_core_web_sm
+          # Stamp the release version into the binary so it can check for updates.
+          printf '__version__ = "%s"\n' "${{ needs.version.outputs.tag }}" > src/version.py
           pyinstaller --noconfirm ffxiv-tts.spec
           cp -r settings dist/settings
           cp -r lexicons dist/lexicons

@@ -3,6 +3,7 @@ import os
 import queue
 import sys
 import tkinter as tk
+import webbrowser
 from tkinter import messagebox
 
 import customtkinter as ctk
@@ -10,6 +11,7 @@ import customtkinter as ctk
 import audio as audio_output
 import paths
 import tts
+import updates
 import voices as voice_data
 
 # Females first, then males, best grade first within each - so the picker is grouped
@@ -190,29 +192,63 @@ class RunScreen(Screen):
         self.service = service
         self.messages = queue.Queue()
 
+        # Update banner: gridded on row 0 but removed until a newer release is found,
+        # so it takes no space when there's nothing to announce.
+        self.update_url = None
+        self.banner = ctk.CTkFrame(self.body, fg_color=("#d8ecff", "#1f3d57"))
+        self.banner.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+        self.banner.grid_columnconfigure(0, weight=1)
+        self.banner_label = ctk.CTkLabel(
+            self.banner, text="", anchor="w", justify="left", text_color=MUTED_TEXT,
+        )
+        self.banner_label.grid(row=0, column=0, sticky="w", padx=12, pady=8)
+        ctk.CTkButton(
+            self.banner, text="Download", width=100, height=28, command=self.open_download,
+        ).grid(row=0, column=1, padx=(0, 6), pady=8)
+        ctk.CTkButton(
+            self.banner, text="✕", width=28, height=28, fg_color="transparent",
+            border_width=1, text_color=MUTED_TEXT, command=self.banner.grid_remove,
+        ).grid(row=0, column=2, padx=(0, 8), pady=8)
+        self.banner.grid_remove()
+
         self.status = ctk.CTkLabel(
             self.body, text="Stopped", font=ctk.CTkFont(size=15, weight="bold"), anchor="w"
         )
-        self.status.grid(row=0, column=0, sticky="w")
+        self.status.grid(row=1, column=0, sticky="w")
 
         self.button = ctk.CTkButton(
             self.body, text="Start", command=self.toggle, height=42, width=150,
             font=ctk.CTkFont(size=14, weight="bold"),
         )
-        self.button.grid(row=0, column=1, sticky="e")
+        self.button.grid(row=1, column=1, sticky="e")
 
         self.log = ctk.CTkTextbox(
             self.body, fg_color=("gray92", "gray14"), font=ctk.CTkFont(family="monospace", size=11),
             wrap="word",
         )
-        self.log.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(16, 0))
+        self.log.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(16, 0))
         self.log.configure(state="disabled")
-        self.body.grid_rowconfigure(1, weight=1)
+        self.body.grid_rowconfigure(2, weight=1)
         self.body.grid_columnconfigure(0, weight=1)
 
         self.append("Press Start to begin. The speech model loads on the first run,")
         self.append("which can take a minute and needs an internet connection.")
         self.drain()
+
+        # Check GitHub for a newer build off the UI thread; check() no-ops on a dev build.
+        updates.check_async(lambda result: self.after(0, lambda: self.show_update(result)))
+
+    def show_update(self, result):
+        if not result:
+            return
+        tag, url = result
+        self.update_url = url
+        self.banner_label.configure(text=f"Update available: {tag}. You have {updates.__version__}.")
+        self.banner.grid()
+        self.append(f"Update available: {tag} (you have {updates.__version__}). Press Download to get it.")
+
+    def open_download(self):
+        webbrowser.open(self.update_url or updates.RELEASES_PAGE)
 
     def append(self, line):
         self.messages.put(line)
