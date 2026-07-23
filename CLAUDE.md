@@ -40,11 +40,14 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   `sys.stdout is None`, so any `print()` inside torch/kokoro would crash the app.
 - **`tts.py`** — `TTSService` wraps the websocket listener on a daemon thread with
   start/stop/reconnect. Kokoro is imported *inside* `_load()`, not at module scope, so the
-  window appears before torch's multi-second import. Playback volume follows the *voice's* own
-  gender (`voice_data.classify_gender(voice)`), not the plugin's reported `Voice.Name` — that
-  field is only the fallback for characters absent from `voices.json`. Comparing against
-  `female_voice` instead was a real bug: it matched only the one regional default, so every
-  other female voice played at the male volume.
+  window appears before torch's multi-second import. Playback volume and speed come from the
+  `settings["voice_settings"]` override for the chosen voice if it has one (set on the GUI's
+  Voice Tuning screen); otherwise volume falls back to the per-*gender* default keyed on the
+  voice's own gender (`voice_data.classify_gender(voice)`) and speed to the global `speed`. The
+  gender is the voice's, not the plugin's reported `Voice.Name` — that field is only the
+  fallback for characters absent from `voices.json`. Comparing against `female_voice` instead
+  was a real bug: it matched only the one regional default, so every other female voice played
+  at the male volume.
 - **`settings_gui.py`** — sidebar of `Screen` subclasses (Run/General/Name/Voices/Audio),
   registered in `SettingsApp.SCREENS`. The Run screen tees `sys.stdout` through `LogStream`
   into an on-screen log. Each screen writes only its own keys via `update_settings(**changes)`,
@@ -70,7 +73,8 @@ to both at runtime. `ffxiv-tts.spec` intentionally excludes them; `build.sh`/`bu
 them into `dist/` afterwards.
 
 - `settings/settings.json` — region (US/UK picks the Kokoro `lang_code` and default voices),
-  speed, per-gender volume, audio device.
+  speed, per-gender volume, audio device, and `voice_settings` (per-voice `{volume, speed}`
+  overrides, absent voices fall back to the gender/global defaults).
 - `settings/voices.json` — `{expansion: {character: voice_id}}`, flattened to a lowercased
   lookup at runtime. `voices.py` still converts the legacy `{gender: {voice: [names]}}` layout.
 - `lexicons/*/lexicon.pls` — W3C PLS pronunciation files, vendored from
