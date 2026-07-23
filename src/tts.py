@@ -130,6 +130,9 @@ class TTSService:
         self.speed = settings.get("speed", 1.0)
         self.male_volume = settings.get("malevolume", 0.7)
         self.female_volume = settings.get("femalevolume", 0.7)
+        # Per-voice {voice_id: {"volume", "speed"}} overrides layered over the
+        # gender/global defaults above; voices absent here use those defaults.
+        self.voice_settings = settings.get("voice_settings", {})
         print(f"Using male voice {self.male_voice} and female voice {self.female_voice}")
 
         self.voice_lookup = voice_data.build_lookup(
@@ -215,16 +218,20 @@ class TTSService:
             print(f"{speaker or 'Unknown'}: {payload}")
             print(f"  voice: {voice}")
 
-            # Volume follows the voice's own gender. Comparing against female_voice
-            # only matched the one regional default, so every character using any
-            # other female voice was played at the male volume.
-            volume = (
+            # Volume and speed follow this voice's own override when it has one.
+            # The fallback volume follows the voice's own gender: comparing against
+            # female_voice only matched the one regional default, so every character
+            # using any other female voice was played at the male volume.
+            override = self.voice_settings.get(voice, {})
+            volume = override.get(
+                "volume",
                 self.female_volume
                 if voice_data.classify_gender(voice) == "female"
-                else self.male_volume
+                else self.male_volume,
             )
+            speed = override.get("speed", self.speed)
 
-            for _, _, audio in self.pipeline(payload, voice=voice, speed=self.speed):
+            for _, _, audio in self.pipeline(payload, voice=voice, speed=speed):
                 audio = np.asarray(audio, dtype=np.float32) * volume
                 audio = audio_output.resample_audio(audio, KOKORO_SAMPLE_RATE, self.sample_rate)
                 sd.play(audio, samplerate=self.sample_rate)

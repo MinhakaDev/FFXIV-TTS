@@ -20,6 +20,12 @@ SETTINGS_PATH = os.path.join(paths.settings_dir(), "settings.json")
 VOICES_PATH = os.path.join(paths.settings_dir(), "voices.json")
 NAME_LEXICON_PATH = os.path.join(paths.lexicons_dir(), "Your-Name", "lexicon.pls")
 
+# CTkButton's default text_color is near-white in *both* appearance modes, which is
+# only legible on the filled blue buttons. Any button with a transparent or light-gray
+# fill (nav buttons, outline buttons) needs a theme-aware text colour or it turns into
+# white-on-light and vanishes in Light mode.
+MUTED_TEXT = ("gray10", "gray90")
+
 DEFAULT_SETTINGS = {
     "region": "US",
     "speed": 1.0,
@@ -27,6 +33,9 @@ DEFAULT_SETTINGS = {
     "femalevolume": 0.7,
     "audio_device": "auto",
     "appearance": "Dark",
+    # {voice_id: {"volume": float, "speed": float}} - per-voice overrides layered over
+    # the region/gender defaults above. Voices absent here fall back to those defaults.
+    "voice_settings": {},
 }
 
 
@@ -158,9 +167,11 @@ class Screen(ctk.CTkFrame):
         readout.grid(row=0, column=1, padx=(12, 0))
 
         var = tk.DoubleVar(value=value)
+        # Trace the var (not the slider's command) so the readout also tracks a
+        # programmatic .set() - the Voice Tuning screen resets the sliders that way.
+        var.trace_add("write", lambda *_: readout.configure(text=f"{var.get():.1f}"))
         ctk.CTkSlider(
             holder, from_=from_, to=to, variable=var, number_of_steps=int((to - from_) * 20),
-            command=lambda v: readout.configure(text=f"{float(v):.1f}"),
         ).grid(row=0, column=0, sticky="ew")
         return var
 
@@ -243,7 +254,7 @@ class GeneralScreen(Screen):
 
         self.field(0, "Region")
         self.region = ctk.CTkSegmentedButton(
-            self.body, values=["US", "UK"], width=200,
+            self.body, values=["US", "UK"], width=200, text_color=MUTED_TEXT,
         )
         self.region.set(settings.get("region", "US"))
         self.region.grid(row=0, column=1, sticky="w")
@@ -264,6 +275,83 @@ class GeneralScreen(Screen):
         messagebox.showinfo("Saved", "General settings saved.")
 
 
+class VoiceTuningScreen(Screen):
+    title = "Voice Tuning"
+    subtitle = "Override volume and speed for one voice at a time.\nVoices you leave alone use the General defaults."
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        settings = load_settings()
+        self.male_default = settings.get("malevolume", 0.7)
+        self.female_default = settings.get("femalevolume", 0.7)
+        self.speed_default = settings.get("speed", 1.0)
+        self.overrides = {v: dict(o) for v, o in settings.get("voice_settings", {}).items()}
+        self.current = None
+
+        self.field(0, "Voice")
+        self.voice = ctk.CTkOptionMenu(
+            self.body, values=VOICE_CHOICES, width=260,
+            command=lambda _: self.load_voice(),
+        )
+        self.voice.set(VOICE_CHOICES[0])
+        self.voice.grid(row=0, column=1, sticky="w")
+
+        self.volume = self.slider(1, "Volume", self.female_default, 0.0, 2.0)
+        self.speed = self.slider(2, "Speed", self.speed_default, 0.5, 2.0)
+
+        buttons = ctk.CTkFrame(self.body, fg_color="transparent")
+        buttons.grid(row=3, column=0, columnspan=2, pady=(28, 0))
+        ctk.CTkButton(
+            buttons, text="Reset to default", command=self.reset, height=38, width=150,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(buttons, text="Save", command=self.save, height=38, width=130).pack(side="left")
+
+        self.load_voice()
+
+    def _defaults_for(self, voice):
+        volume = self.female_default if voice_data.classify_gender(voice) == "female" else self.male_default
+        return volume, self.speed_default
+
+    def load_voice(self):
+        # Commit the voice we were showing before moving to the new one, so edits
+        # survive switching between voices without a save in between.
+        if self.current is not None:
+            self.overrides[self.current] = {
+                "volume": round(self.volume.get(), 2),
+                "speed": round(self.speed.get(), 2),
+            }
+        voice = voice_data.voice_from_description(self.voice.get())
+        self.current = voice
+        override = self.overrides.get(voice)
+        if override:
+            volume, speed = override["volume"], override["speed"]
+        else:
+            volume, speed = self._defaults_for(voice)
+        self.volume.set(volume)
+        self.speed.set(speed)
+
+    def reset(self):
+        voice = voice_data.voice_from_description(self.voice.get())
+        self.overrides.pop(voice, None)
+        volume, speed = self._defaults_for(voice)
+        self.volume.set(volume)
+        self.speed.set(speed)
+
+    def save(self):
+        self.load_voice()  # fold the on-screen voice back into overrides
+        # Drop anything left at the defaults so tweaking then reverting a voice
+        # doesn't freeze it against later changes to the General defaults.
+        self.overrides = {
+            voice: {"volume": round(o["volume"], 2), "speed": round(o["speed"], 2)}
+            for voice, o in self.overrides.items()
+            if (round(o["volume"], 2), round(o["speed"], 2))
+            != tuple(round(d, 2) for d in self._defaults_for(voice))
+        }
+        update_settings(voice_settings=self.overrides)
+        messagebox.showinfo("Saved", "Voice tuning saved.")
+
+
 class AudioScreen(Screen):
     title = "Audio"
     subtitle = "Where the speech is played. Use Test sound to check it before saving."
@@ -282,7 +370,7 @@ class AudioScreen(Screen):
         self.device.grid(row=0, column=0, sticky="ew")
         ctk.CTkButton(
             picker, text="Refresh", command=self.refresh, width=80, height=28,
-            fg_color="transparent", border_width=1,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
         ).grid(row=0, column=1, padx=(8, 0))
 
         ctk.CTkLabel(
@@ -302,7 +390,7 @@ class AudioScreen(Screen):
         buttons.grid(row=2, column=0, columnspan=2, pady=(28, 0))
         ctk.CTkButton(
             buttons, text="Test sound", command=self.test, height=38, width=130,
-            fg_color="transparent", border_width=1,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
         ).pack(side="left", padx=(0, 10))
         ctk.CTkButton(buttons, text="Save", command=self.save, height=38, width=130).pack(side="left")
 
@@ -394,7 +482,8 @@ class VoiceRow:
 
         ctk.CTkButton(
             self.frame, text="✕", width=32, command=lambda: on_remove(self),
-            fg_color="transparent", border_width=1, hover_color=("#e5c5c5", "#5a3535"),
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+            hover_color=("#e5c5c5", "#5a3535"),
         ).pack(side="left")
 
     def commit(self):
@@ -441,7 +530,7 @@ class VoicesScreen(Screen):
         buttons.grid(row=2, column=0, columnspan=2, sticky="w", pady=(16, 0))
         ctk.CTkButton(
             buttons, text="+ Add character", command=self.add_character, height=38, width=150,
-            fg_color="transparent", border_width=1,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
         ).pack(side="left", padx=(0, 10))
         ctk.CTkButton(buttons, text="Save", command=self.save, height=38, width=130).pack(side="left")
 
@@ -496,6 +585,7 @@ class SettingsApp(ctk.CTk):
     SCREENS = (
         ("Run", RunScreen),
         ("General", GeneralScreen),
+        ("Tuning", VoiceTuningScreen),
         ("Name", NameScreen),
         ("Voices", VoicesScreen),
         ("Audio", AudioScreen),
@@ -525,7 +615,7 @@ class SettingsApp(ctk.CTk):
         for i, (name, screen_class) in enumerate(self.SCREENS, start=1):
             button = ctk.CTkButton(
                 sidebar, text=name, anchor="w", height=38, corner_radius=8,
-                command=lambda n=name: self.show(n),
+                text_color=MUTED_TEXT, command=lambda n=name: self.show(n),
             )
             button.grid(row=i, column=0, padx=12, pady=3, sticky="ew")
             self.nav_buttons[name] = button
@@ -537,9 +627,11 @@ class SettingsApp(ctk.CTk):
         ctk.CTkLabel(sidebar, text="Appearance", font=ctk.CTkFont(size=11), anchor="w").grid(
             row=len(self.SCREENS) + 2, column=0, padx=20, sticky="w"
         )
-        appearance = ctk.CTkOptionMenu(
-            sidebar, values=["Dark", "Light", "System"], width=140,
-            command=self.set_appearance,
+        # A segmented button rather than an option menu: this sits at the bottom of
+        # the sidebar, and a dropdown would open below the window, off-screen.
+        appearance = ctk.CTkSegmentedButton(
+            sidebar, values=["Dark", "Light", "System"], width=146,
+            text_color=MUTED_TEXT, command=self.set_appearance,
         )
         appearance.set(load_settings().get("appearance", "Dark"))
         appearance.grid(row=len(self.SCREENS) + 3, column=0, padx=12, pady=(4, 20))
