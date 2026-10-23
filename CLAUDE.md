@@ -42,19 +42,19 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   start/stop/reconnect. Kokoro is imported *inside* `_load()`, not at module scope, so the
   window appears before torch's multi-second import. Playback volume and speed come from the
   `settings["voice_settings"]` override for the chosen voice if it has one (set on the GUI's
-  Voice Tuning screen); otherwise volume falls back to the per-*gender* default keyed on the
-  voice's own gender (`voice_data.classify_gender(voice)`) and speed to the global `speed`. The
-  gender is the voice's, not the plugin's reported `Voice.Name` — that field is only the
-  fallback for characters absent from `voices.json`. Comparing against `female_voice` instead
-  was a real bug: it matched only the one regional default, so every other female voice played
-  at the male volume.
-- **`settings_gui.py`** — sidebar of `Screen` subclasses (Run/General/Name/Voices/Audio),
+  Tuning screen); otherwise volume falls back to the per-*gender* default keyed on the
+  voice's own gender (`voice_data.classify_gender(voice)`, where `voice_data` is `voices.py`)
+  and speed to the global `speed`. The gender is the voice's, not the plugin's reported
+  `Voice.Name` — that field is only the fallback for characters absent from `voices.json`.
+  Comparing against `female_voice` instead was a real bug: it matched only the one regional
+  default, so every other female voice played at the male volume.
+- **`settings_gui.py`** — sidebar of `Screen` subclasses (Run/General/Tuning/Name/Voices/Audio),
   registered in `SettingsApp.SCREENS`. The Run screen tees `sys.stdout` through `LogStream`
-  into an on-screen log. Each screen writes only its own keys via `update_settings(**changes)`,
-  which re-reads the file first so screens don't clobber each other. `DEFAULT_SETTINGS` is the
-  source of truth for which settings keys exist and their defaults — the shipped
-  `settings.json` can lag it (it has no `appearance` key, for one), and `load_settings()` layers
-  the file over those defaults.
+  into an on-screen log and shows the update banner. Each screen writes only its own keys via
+  `update_settings(**changes)`, which re-reads the file first so screens don't clobber each
+  other. `DEFAULT_SETTINGS` is the source of truth for which settings keys exist and their
+  defaults — the shipped `settings.json` can lag it (it has no `appearance` key, for one), and
+  `load_settings()` layers the file over those defaults.
 - **`voices.py`** — shared character→voice data plus Kokoro's published quality grades. The
   picker sorts females first, then by grade, since every male voice is C+ or below.
 - **`audio.py`** — PortAudio device selection. Deliberately prefers a `pipewire`/`pulse` device
@@ -63,6 +63,13 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   (those indices shift between boots and when a wireless headset sleeps), and
   `refresh_devices()` tears down and re-initialises PortAudio because it caches the device list
   at init, hiding anything switched on after launch.
+- **`updates.py`** / **`version.py`** — update check against the GitHub Releases API. It only
+  *detects* a newer release and links to the download page; it never replaces the binary.
+  `check()` never raises (offline/rate-limited → `None`). `check_async()` runs its callback on a
+  worker thread, so Tk callers must marshal back with `widget.after(0, ...)`. `version.py`
+  holds `"0.0.0-dev"` in the repo, which fails the anchored `vX.Y.Z` parse, so source runs and
+  local builds skip the check before any network call. Leave that default committed — CI
+  overwrites the file with the release tag at build time.
 - **`paths.py`** — resolves `settings/` and `lexicons/` next to the executable when frozen,
   next to the repo root otherwise.
 
@@ -103,8 +110,9 @@ Two non-obvious constraints, both already commented in the spec — preserve the
 ## Releases
 
 Every push to `main` builds Linux + Windows on GitHub runners, auto-tags the next patch version,
-and publishes a release. `[skip ci]` in the commit message skips it. Minor/major bumps are the
-one manual step: push the tag yourself first (`git tag v0.2.0 && git push origin v0.2.0`) and
-patch numbering continues from there. Manual `workflow_dispatch` runs build artifacts without
-releasing — use that to test a build. PyInstaller can't cross-compile, so the Windows `.exe`
-can only come from CI or a Windows machine.
+stamps it into `src/version.py`, and publishes a release. `[skip ci]` in the commit message skips
+it (use it for docs-only commits). Minor/major bumps are the one manual step: push the tag
+yourself first (`git tag v0.2.0 && git push origin v0.2.0`) and patch numbering continues from
+there. Manual `workflow_dispatch` runs build artifacts without releasing — use that to test a
+build. PyInstaller can't cross-compile, so the Windows `.exe` can only come from CI or a
+Windows machine.
