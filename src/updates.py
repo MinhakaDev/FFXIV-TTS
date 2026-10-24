@@ -7,8 +7,11 @@ entirely, before any network call, so running from source never nags.
 
 import json
 import re
+import ssl
 import threading
 import urllib.request
+
+import certifi
 
 from version import __version__
 
@@ -27,12 +30,25 @@ def _parse(tag):
     return tuple(int(part) for part in match.groups()) if match else None
 
 
+def _tls_context():
+    """The system's CA certificates plus certifi's bundle.
+
+    The Linux release bundles the CI runner's (Ubuntu's) OpenSSL, which looks for CA
+    certificates under /usr/lib/ssl. Arch, Fedora and SteamOS keep theirs elsewhere, so
+    with the system store alone every request failed verification there and the check
+    went silent. certifi ships inside the build, so its bundle is always there.
+    """
+    context = ssl.create_default_context()
+    context.load_verify_locations(cafile=certifi.where())
+    return context
+
+
 def _latest_release(timeout):
     request = urllib.request.Request(
         RELEASES_API,
         headers={"Accept": "application/vnd.github+json", "User-Agent": "ffxiv-tts"},
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=timeout, context=_tls_context()) as response:
         data = json.load(response)
     return data.get("tag_name"), data.get("html_url") or RELEASES_PAGE
 
