@@ -98,6 +98,9 @@ jobs:
 
       - name: Zip release assets
         run: |
+          # upload-artifact doesn't keep file permissions, so the Linux binary comes back
+          # without its execute bit. Restore it, or the app won't run once unzipped.
+          chmod +x artifacts/ffxiv-tts-linux/ffxiv-tts
           cd artifacts/ffxiv-tts-linux && zip -r ../../ffxiv-tts-linux.zip . && cd -
           cd artifacts/ffxiv-tts-windows && zip -r ../../ffxiv-tts-windows.zip . && cd -
 
