@@ -22,14 +22,19 @@ If you don't already have the FFXIV launcher installed and configured, follow th
 ### Option A: Download a release (recommended, no Python required)
 
 1. Download the latest release zip for your platform. It contains one app —
-   `ffxiv-tts.exe` on Windows, `ffxiv-tts` on Linux — plus a `settings/` folder and a
-   `lexicons/` folder. Keep all three together.
+   `ffxiv-tts.exe` on Windows, `ffxiv-tts` on Linux — plus a `lexicons/` folder. Keep them
+   together: the app creates its `settings/` folder next to them the first time it runs.
 2. Open the [FFXIV Launcher](#how-to-install-and-configure-ffxiv-launcher) and log in.
 3. Run the app and press **Start**. Everything else — voices, volumes, your name's
    pronunciation, audio device — is in the same window (see [Settings](#settings)).
 
 The first Start downloads the speech model, so it takes a minute and needs an internet
 connection. After that it starts quickly and works offline.
+
+**Updating:** unzip the new release over the old folder, replacing files when asked. The zip
+holds no settings, so yours are kept: region, volumes, voice tuning, audio device, character
+voices and your name's pronunciation. Characters the new release adds to the voice list are
+merged in, and characters you already have keep the voice you gave them.
 
 On Linux you'll also need the system audio libraries the binary links against:
 `sudo apt-get install portaudio19-dev libsndfile1 libasound2` (or your distro's equivalent —

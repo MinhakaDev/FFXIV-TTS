@@ -24,14 +24,16 @@ python -m spacy download en_core_web_sm
 
 pyinstaller --noconfirm ffxiv-tts.spec
 
-# Refresh lexicons, but keep any settings you already configured in dist/ - a plain
-# `cp -r settings dist/settings` would also nest a second copy inside the existing one.
-rm -rf dist/lexicons
-cp -r lexicons dist/lexicons
-if [ -d dist/settings ]; then
-    echo "Kept your existing dist/settings (delete it to reset to defaults)."
-else
-    cp -r settings dist/settings
+# settings/ isn't copied: the binary carries the defaults and merges them into
+# dist/settings when it starts, keeping anything already configured there. Refresh the
+# lexicon packages, but keep the name saved on the Name screen.
+rm -rf dist/lexicons.new
+cp -r lexicons dist/lexicons.new
+rm dist/lexicons.new/Your-Name/lexicon.pls
+if [ -f dist/lexicons/Your-Name/lexicon.pls ]; then
+    mv dist/lexicons/Your-Name/lexicon.pls dist/lexicons.new/Your-Name/
 fi
+rm -rf dist/lexicons
+mv dist/lexicons.new dist/lexicons
 
-echo "Build ready in dist/: ffxiv-tts, settings/, lexicons/"
+echo "Build ready in dist/: ffxiv-tts and lexicons/ (settings/ is created on first run)"

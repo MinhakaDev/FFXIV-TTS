@@ -14,3 +14,8 @@ def settings_dir():
 
 def lexicons_dir():
     return os.path.join(base_dir(), "lexicons")
+
+
+def defaults_dir():
+    """The shipped settings a frozen build carries inside itself (see defaults.py)."""
+    return os.path.join(sys._MEIPASS, "defaults")

@@ -1,9 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Build with: pyinstaller ffxiv-tts.spec
 # Produces a single dist/ffxiv-tts holding both the settings screens and the TTS runtime.
-# settings/ and lexicons/ are NOT bundled here on purpose - they must ship as editable
-# folders next to the executable (see build.sh / build.bat), since the app writes to them
-# at runtime.
+# lexicons/ is NOT bundled here on purpose - it ships as an editable folder next to the
+# executable (see build.sh / build.bat), since the Name screen writes into it. settings/
+# doesn't ship as a folder at all: its defaults are bundled below, and the app merges them
+# into an editable settings/ folder next to the executable when it starts, so unzipping
+# an update can't overwrite what the user configured.
 
 import os
 
@@ -47,6 +49,12 @@ datas, binaries, hiddenimports = collect_packages(
     'kokoro', 'misaki', 'phonemizer', 'segments', 'csvw', 'language_tags',
     'espeakng_loader', 'en_core_web_sm', 'customtkinter',
 )
+
+# Read-only copies of the shipped settings, merged into the user's own by defaults.py.
+datas += [
+    ('settings/settings.json', 'defaults'),
+    ('settings/voices.json', 'defaults'),
+]
 
 analysis = Analysis(
     ['src/main.py'],

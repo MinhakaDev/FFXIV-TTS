@@ -23,6 +23,11 @@ def _ensure_streams():
 def main():
     _ensure_streams()
 
+    # Before anything reads settings/: merge in what this release's defaults add.
+    import defaults
+
+    defaults.install()
+
     if "--headless" in sys.argv:
         import tts
         import updates
