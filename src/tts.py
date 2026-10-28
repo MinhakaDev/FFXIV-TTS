@@ -241,12 +241,20 @@ class TTSService:
             )
             speed = override.get("speed", self.speed)
 
+            # Synthesize the whole line before playing it. sd.play() stops whatever is
+            # still playing, so playing each chunk as soon as it was ready cut off the
+            # one before it, and a line long enough to need several chunks lost all but
+            # its end.
+            chunks = []
             for _, _, audio in self.pipeline(payload, voice=voice, speed=speed):
                 if self._stopping:
-                    return  # don't keep speaking the rest of a long line after Stop
-                audio = np.asarray(audio, dtype=np.float32) * volume
-                audio = audio_output.resample_audio(audio, KOKORO_SAMPLE_RATE, self.sample_rate)
-                sd.play(audio, samplerate=self.sample_rate)
+                    return  # Stop pressed while the line was being synthesized
+                chunks.append(np.asarray(audio, dtype=np.float32))
+            if not chunks:
+                return
+            audio = np.concatenate(chunks) * volume
+            audio = audio_output.resample_audio(audio, KOKORO_SAMPLE_RATE, self.sample_rate)
+            sd.play(audio, samplerate=self.sample_rate)
 
         except Exception as exc:
             print(f"Error handling message: {exc}")
