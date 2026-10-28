@@ -93,6 +93,10 @@ class TTSService:
         self._thread.start()
 
     def stop(self):
+        # Only signals the worker: `running` stays True until _run() has actually
+        # returned. Clearing it here let a Start pressed meanwhile reset _stopping and
+        # revive a worker still loading the model, speaking a line or waiting to
+        # reconnect, so two listeners spoke every line and Stop only closed one.
         self._stopping = True
         if self._ws is not None:
             try:
@@ -100,8 +104,6 @@ class TTSService:
             except Exception:
                 pass
         sd.stop()
-        self.running = False
-        self._notify()
 
     def _notify(self):
         if self._on_state_change:
@@ -176,7 +178,7 @@ class TTSService:
         while not self._stopping:
             self._ws = websocket.WebSocketApp(
                 WEBSOCKET_URL,
-                on_open=lambda ws: print("Connected to FFXIV. Waiting for dialogue..."),
+                on_open=self._on_open,
                 on_message=self._on_message,
                 on_error=self._on_error,
                 on_close=lambda ws, code, msg: print("Connection closed"),
@@ -189,6 +191,14 @@ class TTSService:
                 if self._stopping:
                     return
                 time.sleep(1)
+
+    def _on_open(self, ws):
+        if self._stopping:
+            # Stop landed between the loop's check and this socket existing, so its
+            # close() missed it.
+            ws.close()
+            return
+        print("Connected to FFXIV. Waiting for dialogue...")
 
     def _on_error(self, ws, error):
         text = str(error)
@@ -206,7 +216,7 @@ class TTSService:
                 sd.stop()
                 return
 
-            if data.get("Type") != "Say":
+            if data.get("Type") != "Say" or self._stopping:
                 return
 
             speaker = data.get("Speaker", "")
@@ -232,6 +242,8 @@ class TTSService:
             speed = override.get("speed", self.speed)
 
             for _, _, audio in self.pipeline(payload, voice=voice, speed=speed):
+                if self._stopping:
+                    return  # don't keep speaking the rest of a long line after Stop
                 audio = np.asarray(audio, dtype=np.float32) * volume
                 audio = audio_output.resample_audio(audio, KOKORO_SAMPLE_RATE, self.sample_rate)
                 sd.play(audio, samplerate=self.sample_rate)

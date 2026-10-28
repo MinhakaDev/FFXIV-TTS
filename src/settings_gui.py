@@ -271,13 +271,17 @@ class RunScreen(Screen):
     def toggle(self):
         if self.service.running:
             self.append("Stopping...")
+            # The worker may still be loading the model or finishing a line; it reports
+            # back through set_running() once it has really exited.
+            self.status.configure(text="Stopping...")
+            self.button.configure(state="disabled")
             self.service.stop()
         else:
             self.service.start()
 
     def set_running(self, running):
         self.status.configure(text="Running" if running else "Stopped")
-        self.button.configure(text="Stop" if running else "Start")
+        self.button.configure(text="Stop" if running else "Start", state="normal")
 
 
 class GeneralScreen(Screen):
