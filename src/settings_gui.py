@@ -191,6 +191,7 @@ class RunScreen(Screen):
         super().__init__(parent)
         self.service = service
         self.messages = queue.Queue()
+        self.update_result = queue.Queue()
 
         # Update banner: gridded on row 0 but removed until a newer release is found,
         # so it takes no space when there's nothing to announce.
@@ -236,7 +237,10 @@ class RunScreen(Screen):
         self.drain()
 
         # Check GitHub for a newer build off the UI thread; check() no-ops on a dev build.
-        updates.check_async(lambda result: self.after(0, lambda: self.show_update(result)))
+        # The result comes back through a queue that drain() polls. Calling self.after()
+        # from the worker instead raises if it lands before mainloop() has started - and
+        # a dev build's check returns at once, while the other screens are still being built.
+        updates.check_async(self.update_result.put)
 
     def show_update(self, result):
         if not result:
@@ -254,7 +258,8 @@ class RunScreen(Screen):
         self.messages.put(line)
 
     def drain(self):
-        """Tk isn't thread-safe, so log lines are queued and flushed on the UI thread."""
+        """Tk isn't thread-safe, so other threads queue log lines and the update result
+        for this to apply on the UI thread."""
         lines = []
         while True:
             try:
@@ -266,6 +271,10 @@ class RunScreen(Screen):
             self.log.insert("end", "\n".join(lines) + "\n")
             self.log.see("end")
             self.log.configure(state="disabled")
+        try:
+            self.show_update(self.update_result.get_nowait())
+        except queue.Empty:
+            pass
         self.after(150, self.drain)
 
     def toggle(self):
