@@ -100,6 +100,28 @@ def build_name_lexicon(name, pronunciation):
 </lexicon>"""
 
 
+def open_in_browser(url):
+    """webbrowser.open(), with the system's library path for whatever it launches.
+
+    A frozen Linux build runs with LD_LIBRARY_PATH pointing into its bundle, and child
+    processes inherit it: xdg-open's /bin/sh and the browser then load the bundle's (the
+    CI runner's) libraries and can die before the page opens. PyInstaller keeps the
+    original value in LD_LIBRARY_PATH_ORIG.
+    """
+    if not (getattr(sys, "frozen", False) and sys.platform.startswith("linux")):
+        return webbrowser.open(url)
+    saved = os.environ.pop("LD_LIBRARY_PATH", None)
+    original = os.environ.get("LD_LIBRARY_PATH_ORIG")
+    if original is not None:
+        os.environ["LD_LIBRARY_PATH"] = original
+    try:
+        return webbrowser.open(url)
+    finally:
+        os.environ.pop("LD_LIBRARY_PATH", None)
+        if saved is not None:
+            os.environ["LD_LIBRARY_PATH"] = saved
+
+
 class LogStream:
     """Tees writes to the on-screen log, keeping the real stream when there is one."""
 
@@ -249,10 +271,13 @@ class RunScreen(Screen):
         self.update_url = url
         self.banner_label.configure(text=f"Update available: {tag}. You have {updates.__version__}.")
         self.banner.grid()
-        self.append(f"Update available: {tag} (you have {updates.__version__}). Press Download to get it.")
+        # The link goes in the log as well, where it can be copied if no browser opens.
+        self.append(updates.notice(tag, url))
 
     def open_download(self):
-        webbrowser.open(self.update_url or updates.RELEASES_PAGE)
+        url = self.update_url or updates.RELEASES_PAGE
+        if not open_in_browser(url):
+            self.append(f"Couldn't open a browser. Download the update from {url}")
 
     def append(self, line):
         self.messages.put(line)

@@ -72,6 +72,14 @@ def check(timeout=6):
     return None
 
 
+def notice(tag, url):
+    """The update message for the Run screen's log and for headless mode."""
+    return (
+        f"Update available: {tag} (you have {__version__}). Download it from {url} "
+        "and unzip it over this folder - your settings are kept."
+    )
+
+
 def check_async(callback):
     """Run check() on a daemon thread and hand the result to callback(result).
 

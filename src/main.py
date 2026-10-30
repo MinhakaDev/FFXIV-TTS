@@ -34,8 +34,7 @@ def main():
 
         result = updates.check()
         if result:
-            tag, url = result
-            print(f"Update available: {tag} (you have {updates.__version__}). Download: {url}")
+            print(updates.notice(*result))
 
         service = tts.TTSService()
         service.start()
