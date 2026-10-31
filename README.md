@@ -31,6 +31,10 @@ If you don't already have the FFXIV launcher installed and configured, follow th
 The first Start downloads the speech model, so it takes a minute and needs an internet
 connection. After that it starts quickly and works offline.
 
+`ffxiv-tts --headless` (`ffxiv-tts.exe --headless` on Windows) runs the TTS in a terminal
+without opening the window. On Windows the prompt comes back straight away, but the output
+keeps appearing in that terminal; press Ctrl+C there to stop it.
+
 **Updating:** unzip the new release over the old folder, replacing files when asked. The zip
 holds no settings, so yours are kept: region, volumes, voice tuning, audio device, character
 voices and your name's pronunciation. Characters the new release adds to the voice list are
