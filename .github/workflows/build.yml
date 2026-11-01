@@ -12,6 +12,14 @@ on:
 permissions:
   contents: write
 
+# One run at a time. The next version comes from the tags that exist when a run starts,
+# so two overlapping runs both released the same version and the later one overwrote the
+# first one's zips. A queued run waits for the one in progress; if pushes pile up, GitHub
+# keeps only the newest queued run, which builds main with all of them in it.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   version:
     runs-on: ubuntu-latest
@@ -107,11 +115,14 @@ jobs:
           cd artifacts/ffxiv-tts-linux && zip -r ../../ffxiv-tts-linux.zip . && cd -
           cd artifacts/ffxiv-tts-windows && zip -r ../../ffxiv-tts-windows.zip . && cd -
 
-      # Creates the tag at this commit as well as the release, so no tag push is
-      # needed here - which also means this workflow can't retrigger itself.
+      # Creates the tag as well as the release, so no tag push is needed here - which
+      # also means this workflow can't retrigger itself. target_commitish puts the tag on
+      # the commit this run built. Without it GitHub tags main as it is when this step
+      # runs, and a push during the build may have moved it on.
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: ${{ needs.version.outputs.tag }}
           generate_release_notes: true
           files: |
