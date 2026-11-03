@@ -204,6 +204,9 @@ class Screen(ctk.CTkFrame):
             row=row, column=0, columnspan=2, pady=(28, 0)
         )
 
+    def on_show(self):
+        """Called each time the sidebar switches to this screen."""
+
 
 class RunScreen(Screen):
     title = "FFXIV TTS"
@@ -355,12 +358,9 @@ class VoiceTuningScreen(Screen):
 
     def __init__(self, parent):
         super().__init__(parent)
-        settings = load_settings()
-        self.male_default = settings.get("malevolume", 0.7)
-        self.female_default = settings.get("femalevolume", 0.7)
-        self.speed_default = settings.get("speed", 1.0)
-        self.overrides = {v: dict(o) for v, o in settings.get("voice_settings", {}).items()}
+        self.overrides = {v: dict(o) for v, o in load_settings().get("voice_settings", {}).items()}
         self.current = None
+        self.shown = None
 
         self.field(0, "Voice")
         self.voice = ctk.CTkOptionMenu(
@@ -370,8 +370,9 @@ class VoiceTuningScreen(Screen):
         self.voice.set(VOICE_CHOICES[0])
         self.voice.grid(row=0, column=1, sticky="w")
 
-        self.volume = self.slider(1, "Volume", self.female_default, 0.0, 2.0)
-        self.speed = self.slider(2, "Speed", self.speed_default, 0.5, 2.0)
+        volume, speed = self._defaults_for(voice_data.voice_from_description(VOICE_CHOICES[0]))
+        self.volume = self.slider(1, "Volume", volume, 0.0, 2.0)
+        self.speed = self.slider(2, "Speed", speed, 0.5, 2.0)
 
         buttons = ctk.CTkFrame(self.body, fg_color="transparent")
         buttons.grid(row=3, column=0, columnspan=2, pady=(28, 0))
@@ -383,45 +384,64 @@ class VoiceTuningScreen(Screen):
 
         self.load_voice()
 
+    def on_show(self):
+        # The General screen may have saved new defaults since this one was drawn.
+        self.load_voice()
+
     def _defaults_for(self, voice):
-        volume = self.female_default if voice_data.classify_gender(voice) == "female" else self.male_default
-        return volume, self.speed_default
+        # Read fresh rather than once at construction: General can save new defaults
+        # while this screen stays built, and stale copies made Save drop overrides that
+        # matched the old values and store speeds that no longer applied.
+        settings = load_settings()
+        gender_key = "femalevolume" if voice_data.classify_gender(voice) == "female" else "malevolume"
+        return settings.get(gender_key, 0.7), settings.get("speed", 1.0)
+
+    def _show(self, volume, speed):
+        self.volume.set(volume)
+        self.speed.set(speed)
+        self.shown = (round(volume, 2), round(speed, 2))
+
+    def _commit_current(self):
+        """Fold the sliders the user actually moved into the on-screen voice's override."""
+        if self.current is None:
+            return
+        override = self.overrides.get(self.current, {})
+        for key, var, shown in zip(("volume", "speed"), (self.volume, self.speed), self.shown):
+            if round(var.get(), 2) != shown:
+                override[key] = round(var.get(), 2)
+        if override:
+            self.overrides[self.current] = override
 
     def load_voice(self):
         # Commit the voice we were showing before moving to the new one, so edits
         # survive switching between voices without a save in between.
-        if self.current is not None:
-            self.overrides[self.current] = {
-                "volume": round(self.volume.get(), 2),
-                "speed": round(self.speed.get(), 2),
-            }
-        voice = voice_data.voice_from_description(self.voice.get())
-        self.current = voice
-        override = self.overrides.get(voice)
-        if override:
-            volume, speed = override["volume"], override["speed"]
-        else:
-            volume, speed = self._defaults_for(voice)
-        self.volume.set(volume)
-        self.speed.set(speed)
+        self._commit_current()
+        self.current = voice_data.voice_from_description(self.voice.get())
+        override = self.overrides.get(self.current, {})
+        volume, speed = self._defaults_for(self.current)
+        # An override only holds what differs from the defaults, so either key may be absent.
+        self._show(override.get("volume", volume), override.get("speed", speed))
 
     def reset(self):
         voice = voice_data.voice_from_description(self.voice.get())
         self.overrides.pop(voice, None)
-        volume, speed = self._defaults_for(voice)
-        self.volume.set(volume)
-        self.speed.set(speed)
+        self._show(*self._defaults_for(voice))
 
     def save(self):
-        self.load_voice()  # fold the on-screen voice back into overrides
-        # Drop anything left at the defaults so tweaking then reverting a voice
-        # doesn't freeze it against later changes to the General defaults.
-        self.overrides = {
-            voice: {"volume": round(o["volume"], 2), "speed": round(o["speed"], 2)}
-            for voice, o in self.overrides.items()
-            if (round(o["volume"], 2), round(o["speed"], 2))
-            != tuple(round(d, 2) for d in self._defaults_for(voice))
-        }
+        self._commit_current()
+        # Keep only the values that differ from the General defaults, so a voice whose
+        # speed was left alone keeps following the default speed, and tweaking then
+        # reverting a voice doesn't freeze it against later changes to the defaults.
+        kept = {}
+        for voice, override in self.overrides.items():
+            defaults = dict(zip(("volume", "speed"), self._defaults_for(voice)))
+            changed = {
+                key: round(value, 2) for key, value in override.items()
+                if key in defaults and round(value, 2) != round(defaults[key], 2)
+            }
+            if changed:
+                kept[voice] = changed
+        self.overrides = kept
         update_settings(voice_settings=self.overrides)
         messagebox.showinfo("Saved", "Voice tuning saved.")
 
@@ -731,6 +751,9 @@ class SettingsApp(ctk.CTk):
         update_settings(appearance=mode)
 
     def show(self, name):
+        # Screens are built once and kept, so let the one coming up pick up anything
+        # another screen saved in the meantime.
+        self.screens[name].on_show()
         self.screens[name].tkraise()
         for screen_name, button in self.nav_buttons.items():
             button.configure(
