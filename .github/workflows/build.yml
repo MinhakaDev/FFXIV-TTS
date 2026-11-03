@@ -42,7 +42,9 @@ jobs:
             exit 0
           fi
 
-          latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)
+          # Only plain vX.Y.Z tags count. A looser glob also matches a pre-release tag like
+          # v1.0.0-rc1, which sorts last and whose "0-rc1" patch breaks the arithmetic below.
+          latest=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
           if [ -z "$latest" ]; then
             next="v0.1.0"
           else
@@ -83,8 +85,12 @@ jobs:
         run: |
           pip install -r requirements.txt -r requirements-build.txt
           python -m spacy download en_core_web_sm
-          # Stamp the release version into the binary so it can check for updates.
-          printf '__version__ = "%s"\n' "${{ needs.version.outputs.tag }}" > src/version.py
+          # Stamp the version into the binary so it can check for updates. A manual run
+          # releases nothing, so it gets a -test suffix: it mustn't claim a number a later
+          # release will use, and like a dev build's version the suffix keeps the check off.
+          version="${{ needs.version.outputs.tag }}"
+          if [ "${{ github.event_name }}" != "push" ]; then version="$version-test"; fi
+          printf '__version__ = "%s"\n' "$version" > src/version.py
           pyinstaller --noconfirm ffxiv-tts.spec
           # No settings/ here: the binary carries its defaults and merges them into the
           # user's own settings/ when it starts, so unzipping an update keeps them. The
