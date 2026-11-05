@@ -149,6 +149,12 @@ class LogStream:
             except Exception:
                 pass
 
+    def isatty(self):
+        # Not a terminal. tqdm (huggingface_hub's model download) only turns its progress
+        # bars off when told so; otherwise their carriage-return redraws piled up in
+        # _pending and the log got nothing for a minute, then one huge line per file.
+        return False
+
 
 class Screen(ctk.CTkFrame):
     """A page in the sidebar, with a title and a consistent content column."""
