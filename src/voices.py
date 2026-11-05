@@ -59,7 +59,9 @@ EXPANSIONS = [
 
 
 def classify_gender(voice):
-    return "female" if voice.startswith(("af_", "bf_", "zf_")) else "male"
+    # Kokoro ids are <language><gender>_<name> (af_heart, bm_fable, jf_alpha, ff_siwis),
+    # so the second letter says it for every language, not just the ones listed above.
+    return "female" if voice[1:3] == "f_" else "male"
 
 
 def grade_of(voice):
