@@ -28,6 +28,9 @@ NAME_LEXICON_PATH = os.path.join(paths.lexicons_dir(), "Your-Name", "lexicon.pls
 # white-on-light and vanishes in Light mode.
 MUTED_TEXT = ("gray10", "gray90")
 
+# What Voice Tuning's Preview says: two sentences, so there's enough to judge the speed.
+PREVIEW_LINE = "Well met, adventurer. The Scions have need of you once more."
+
 DEFAULT_SETTINGS = {
     "region": "US",
     "speed": 1.0,
@@ -100,6 +103,21 @@ def build_name_lexicon(name, pronunciation):
 </lexicon>"""
 
 
+def speech_ready(service):
+    """True when the speech model is loaded, so previews can play. Otherwise says why not."""
+    if service.ready:
+        return True
+    if service.running:
+        messagebox.showinfo("Still loading", "The speech model is still loading. Try again in a moment.")
+    else:
+        messagebox.showinfo(
+            "Press Start first",
+            "Previews use the speech model, which loads when you press Start on the Run\n"
+            "screen. The game doesn't need to be running.",
+        )
+    return False
+
+
 def open_in_browser(url):
     """webbrowser.open(), with the system's library path for whatever it launches.
 
@@ -162,8 +180,9 @@ class Screen(ctk.CTkFrame):
     title = ""
     subtitle = ""
 
-    def __init__(self, parent):
+    def __init__(self, parent, service):
         super().__init__(parent, fg_color="transparent")
+        self.service = service
         self.grid_columnconfigure(0, weight=1)
 
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -219,8 +238,7 @@ class RunScreen(Screen):
     subtitle = "Start FFXIV and log in, then press Start."
 
     def __init__(self, parent, service):
-        super().__init__(parent)
-        self.service = service
+        super().__init__(parent, service)
         self.messages = queue.Queue()
         self.update_result = queue.Queue()
 
@@ -248,11 +266,17 @@ class RunScreen(Screen):
         )
         self.status.grid(row=1, column=0, sticky="w")
 
+        controls = ctk.CTkFrame(self.body, fg_color="transparent")
+        controls.grid(row=1, column=1, sticky="e")
+        ctk.CTkButton(
+            controls, text="Replay last line", command=self.replay, height=42, width=150,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        ).pack(side="left", padx=(0, 10))
         self.button = ctk.CTkButton(
-            self.body, text="Start", command=self.toggle, height=42, width=150,
+            controls, text="Start", command=self.toggle, height=42, width=150,
             font=ctk.CTkFont(size=14, weight="bold"),
         )
-        self.button.grid(row=1, column=1, sticky="e")
+        self.button.pack(side="left")
 
         self.log = ctk.CTkTextbox(
             self.body, fg_color=("gray92", "gray14"), font=ctk.CTkFont(family="monospace", size=11),
@@ -262,6 +286,21 @@ class RunScreen(Screen):
         self.log.configure(state="disabled")
         self.body.grid_rowconfigure(2, weight=1)
         self.body.grid_columnconfigure(0, weight=1)
+
+        # Speaks whatever is typed, through the same lexicons as the game's lines.
+        say = ctk.CTkFrame(self.body, fg_color="transparent")
+        say.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        say.grid_columnconfigure(0, weight=1)
+        self.say_text = ctk.CTkEntry(say, placeholder_text="Type something to hear it spoken")
+        self.say_text.grid(row=0, column=0, sticky="ew")
+        self.say_text.bind("<Return>", lambda _: self.say())
+        self.say_voice = ctk.CTkOptionMenu(say, values=VOICE_CHOICES, width=200)
+        self.say_voice.set(VOICE_CHOICES[0])
+        self.say_voice.grid(row=0, column=1, padx=8)
+        ctk.CTkButton(
+            say, text="Say", command=self.say, width=80,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        ).grid(row=0, column=2)
 
         self.append("Press Start to begin. The speech model loads on the first run,")
         self.append("which can take a minute and needs an internet connection.")
@@ -322,6 +361,15 @@ class RunScreen(Screen):
         else:
             self.service.start()
 
+    def replay(self):
+        if speech_ready(self.service) and not self.service.replay():
+            self.append("Nothing to replay yet: no line has come from the game.")
+
+    def say(self):
+        text = self.say_text.get().strip()
+        if text and speech_ready(self.service):
+            self.service.say(text, voice_data.voice_from_description(self.say_voice.get()))
+
     def set_running(self, running):
         self.status.configure(text="Running" if running else "Stopped")
         self.button.configure(text="Stop" if running else "Start", state="normal")
@@ -331,8 +379,8 @@ class GeneralScreen(Screen):
     title = "General"
     subtitle = "Language and how loud each voice speaks."
 
-    def __init__(self, parent):
-        super().__init__(parent)
+    def __init__(self, parent, service):
+        super().__init__(parent, service)
         settings = load_settings()
 
         self.field(0, "Region")
@@ -362,8 +410,8 @@ class VoiceTuningScreen(Screen):
     title = "Voice Tuning"
     subtitle = "Override volume and speed for one voice at a time.\nVoices you leave alone use the General defaults."
 
-    def __init__(self, parent):
-        super().__init__(parent)
+    def __init__(self, parent, service):
+        super().__init__(parent, service)
         self.overrides = {v: dict(o) for v, o in load_settings().get("voice_settings", {}).items()}
         self.current = None
         self.shown = None
@@ -382,6 +430,10 @@ class VoiceTuningScreen(Screen):
 
         buttons = ctk.CTkFrame(self.body, fg_color="transparent")
         buttons.grid(row=3, column=0, columnspan=2, pady=(28, 0))
+        ctk.CTkButton(
+            buttons, text="Preview", command=self.preview, height=38, width=110,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        ).pack(side="left", padx=(0, 10))
         ctk.CTkButton(
             buttons, text="Reset to default", command=self.reset, height=38, width=150,
             fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
@@ -428,6 +480,14 @@ class VoiceTuningScreen(Screen):
         # An override only holds what differs from the defaults, so either key may be absent.
         self._show(override.get("volume", volume), override.get("speed", speed))
 
+    def preview(self):
+        # The sliders as they are now, saved or not, so a value can be heard before saving.
+        if speech_ready(self.service):
+            self.service.say(
+                PREVIEW_LINE, voice_data.voice_from_description(self.voice.get()),
+                volume=round(self.volume.get(), 2), speed=round(self.speed.get(), 2),
+            )
+
     def reset(self):
         voice = voice_data.voice_from_description(self.voice.get())
         self.overrides.pop(voice, None)
@@ -456,8 +516,8 @@ class AudioScreen(Screen):
     title = "Audio"
     subtitle = "Where the speech is played. Use Test sound to check it before saving."
 
-    def __init__(self, parent):
-        super().__init__(parent)
+    def __init__(self, parent, service):
+        super().__init__(parent, service)
         settings = load_settings()
 
         self.field(0, "Output device")
@@ -531,8 +591,8 @@ class NameScreen(Screen):
     title = "Name Pronunciation"
     subtitle = "Teach the TTS how to say your character's name."
 
-    def __init__(self, parent):
-        super().__init__(parent)
+    def __init__(self, parent, service):
+        super().__init__(parent, service)
 
         ctk.CTkLabel(
             self.body,
@@ -550,7 +610,26 @@ class NameScreen(Screen):
         self.pronunciation = ctk.CTkEntry(self.body, width=280, placeholder_text="miˈɲaka")
         self.pronunciation.grid(row=2, column=1, sticky="ew")
 
-        self.save_button(3, self.save)
+        buttons = ctk.CTkFrame(self.body, fg_color="transparent")
+        buttons.grid(row=3, column=0, columnspan=2, pady=(28, 0))
+        ctk.CTkButton(
+            buttons, text="Preview", command=self.preview, height=38, width=110,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(buttons, text="Save", command=self.save, height=38, width=130).pack(side="left")
+
+    def preview(self):
+        name = self.name.get().strip()
+        if not name:
+            messagebox.showerror("Missing value", "Type your in-game name first.")
+            return
+        pronunciation = self.pronunciation.get().strip()
+        # misaki reads "[word](/phonemes/)" as "say word with these phonemes", so this
+        # plays the pronunciation as typed, before it's saved and loaded by Start. With
+        # none typed, it plays how the name is said today.
+        spoken = f"[{name}](/{pronunciation}/)" if pronunciation else name
+        if speech_ready(self.service):
+            self.service.say(f"Well met, {spoken}.")
 
     def save(self):
         name = self.name.get().strip()
@@ -567,7 +646,7 @@ class NameScreen(Screen):
 class VoiceRow:
     """One character's row. Edits are written straight back into its record."""
 
-    def __init__(self, parent, record, on_remove):
+    def __init__(self, parent, record, on_remove, on_preview):
         self.record = record
         self.frame = ctk.CTkFrame(parent, fg_color="transparent")
         self.frame.pack(fill="x", pady=3)
@@ -580,6 +659,10 @@ class VoiceRow:
         self.voice.set(voice_data.describe_voice(record["voice"]))
         self.voice.pack(side="left", padx=(0, 8))
 
+        ctk.CTkButton(
+            self.frame, text="▶", width=32, command=lambda: on_preview(self),
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             self.frame, text="✕", width=32, command=lambda: on_remove(self),
             fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
@@ -600,8 +683,8 @@ class VoicesScreen(Screen):
 
     ALL = "All expansions"
 
-    def __init__(self, parent):
-        super().__init__(parent)
+    def __init__(self, parent, service):
+        super().__init__(parent, service)
         self.rows = []
         try:
             self.records = load_records()
@@ -654,7 +737,7 @@ class VoicesScreen(Screen):
         # Only the selected expansion's rows exist as widgets; building all ~110 at
         # once is slow enough to be visible when switching screens.
         self.rows = [
-            VoiceRow(self.rows_frame, record, self.remove_row)
+            VoiceRow(self.rows_frame, record, self.remove_row, self.preview_row)
             for record in self.visible_records()
         ]
         shown, total = len(self.rows), len(self.records)
@@ -668,6 +751,18 @@ class VoicesScreen(Screen):
         if selected != expansion:
             self.expansion.set(expansion)
         self.rebuild()
+
+    def preview_row(self, row):
+        # The row as it is on screen, saved or not. The character introduces themself,
+        # which also tries how their name is pronounced.
+        if not speech_ready(self.service):
+            return
+        # voices.json keeps names lowercase; capitalize them as they appear in game.
+        name = " ".join(word[:1].upper() + word[1:] for word in row.person.get().split())
+        self.service.say(
+            f"Well met, adventurer. I am {name}." if name else "Well met, adventurer.",
+            voice_data.voice_from_description(row.voice.get()),
+        )
 
     def remove_row(self, row):
         self.records.remove(row.record)
@@ -720,7 +815,7 @@ class SettingsApp(ctk.CTk):
             button.grid(row=i, column=0, padx=12, pady=3, sticky="ew")
             self.nav_buttons[name] = button
 
-            screen = screen_class(self, self.service) if screen_class is RunScreen else screen_class(self)
+            screen = screen_class(self, self.service)
             screen.grid(row=0, column=1, sticky="nsew")
             self.screens[name] = screen
 

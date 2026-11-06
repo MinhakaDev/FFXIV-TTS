@@ -44,15 +44,24 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   nothing it prints is visible. `defaults.install()` runs before anything reads `settings/`.
 - **`tts.py`** — `TTSService` wraps the websocket listener on a daemon thread with
   start/stop/reconnect. `stop()` only signals: `running` stays True until the worker has really
-  exited, and that is what stops `start()` from running a second worker beside one still
-  loading the model, speaking a line or waiting to reconnect — don't clear it in `stop()`.
-  Kokoro is imported *inside* `_load()`, not at module scope, so the window appears before
-  torch's multi-second import. Each line is synthesized whole, then played with a single
-  `sd.play()`: `sd.play()` stops whatever is still playing, so playing chunk by chunk cut long
-  lines off. Playback volume and speed come from the `settings["voice_settings"]` override for
-  the chosen voice where it has one; otherwise volume falls back to the per-*gender* default
-  keyed on the voice's own gender (`voice_data.classify_gender(voice)`, where `voice_data` is
-  `voices.py`) and speed to the global `speed`, each key separately. The gender is the voice's,
+  exited (including joining its speaker thread), and that is what stops `start()` from running
+  a second worker beside one still loading the model, speaking a line or waiting to reconnect —
+  don't clear it in `stop()`. Kokoro is imported *inside* `_load()`, not at module scope, so the
+  window appears before torch's multi-second import. The websocket thread only queues lines; a
+  speaker thread synthesizes each a sentence at a time (`SENTENCE_BREAK` as Kokoro's
+  `split_pattern` — otherwise Kokoro takes up to ~510 phonemes, most whole lines, in one piece)
+  and feeds the sentences to one `audio.LinePlayer` stream per line, so speech starts after the
+  first sentence. Don't go back to `sd.play()` per chunk: it stops whatever is still playing,
+  which cut long lines off. Each queued line, Cancel and Stop bumps a generation counter, and
+  the speaker drops a line whose generation is stale at the next sentence boundary. The GUI's
+  `say()` (previews, the Run screen's Say box) and `replay()` go through that same queue, so the
+  pipeline is only ever used from the speaker thread; both need `ready` (model loaded).
+  `replay()` re-synthesizes `last_line` rather than keeping audio, so a line skipped before
+  it finished can be replayed too. Playback volume and speed come from the
+  `settings["voice_settings"]` override for the chosen voice where it has one; otherwise
+  volume falls back to the per-*gender* default keyed on the voice's own gender
+  (`voice_data.classify_gender(voice)`, where `voice_data` is `voices.py`) and speed to the
+  global `speed`, each key separately. The gender is the voice's,
   not the plugin's reported `Voice.Name` — that field is only the fallback for characters
   absent from `voices.json`. Comparing against `female_voice` instead was a real bug: it
   matched only the one regional default, so every other female voice played at the male volume.
@@ -69,7 +78,11 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   GUI's fallback for keys missing from the file: new installs get their actual defaults from
   the shipped `settings/settings.json` (speed 1.3, not 1.0), and `tts._load()` reads the file
   itself with its own `.get()` fallbacks, so a new runtime setting needs a fallback there too.
-  Tuning overrides store only the values that differ from the General defaults.
+  Tuning overrides store only the values that differ from the General defaults. Every screen
+  gets the `TTSService`; the Preview buttons (Tuning, Name, a Voices row) and the Run screen's
+  Say box and Replay need the model loaded, so they go through `speech_ready()`, which tells
+  the user to press Start first. Name's Preview speaks the unsaved IPA through misaki's
+  `[word](/phonemes/)` markup, since the saved lexicon only loads at Start.
 - **`voices.py`** — shared character→voice data plus Kokoro's published quality grades. The
   picker sorts females first, then by grade, since every male voice is C+ or below.
   `classify_gender()` reads the id's second letter (Kokoro ids are `<lang><gender>_<name>`).

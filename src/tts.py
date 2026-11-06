@@ -5,14 +5,15 @@ loading Kokoro (slow, pulls in torch) happens on a worker thread rather than at
 import time.
 """
 
+import dataclasses
 import json
 import os
+import queue
 import threading
 import time
 import xml.etree.ElementTree as ET
 
 import numpy as np
-import sounddevice as sd
 import websocket
 
 import audio as audio_output
@@ -38,6 +39,21 @@ REGION_VOICES = {
     "US": ("a", "am_puck", "af_heart"),
     "UK": ("b", "bm_fable", "bf_emma"),
 }
+# Kokoro synthesizes up to ~510 phonemes as one piece, which is most dialogue lines
+# whole. Splitting at sentence ends lets the first sentence play while the rest is
+# still being synthesized. The second alternative catches a sentence ending in a quote.
+SENTENCE_BREAK = r'(?<=[.!?…])\s+|(?<=[.!?…]["”’])\s+'
+
+
+@dataclasses.dataclass
+class Line:
+    text: str
+    voice: str
+    volume: float
+    speed: float
+    # Set when queued. A line whose generation is no longer current has been
+    # superseded by a newer one or a Cancel, and is abandoned.
+    generation: int = 0
 
 
 def parse_pls(filename, aliases):
@@ -72,7 +88,8 @@ def apply_aliases(text, aliases):
 
 
 class TTSService:
-    """Runs the websocket listener on a background thread."""
+    """Runs the websocket listener, and a speaker thread that synthesizes and plays
+    what it queues, in the background."""
 
     def __init__(self, on_state_change=None):
         self._thread = None
@@ -80,6 +97,16 @@ class TTSService:
         self._stopping = False
         self._on_state_change = on_state_change
         self.running = False
+        # True once the model has loaded, until the service stops: say() and replay()
+        # need it.
+        self.ready = False
+        # The last line from the game, kept for replay() - including one skipped before
+        # it was spoken.
+        self.last_line = None
+        self._requests = queue.Queue()
+        self._lock = threading.Lock()
+        self._generation = 0
+        self._player = None
 
     # -- lifecycle ------------------------------------------------------------
 
@@ -87,6 +114,7 @@ class TTSService:
         if self.running:
             return
         self._stopping = False
+        self._requests = queue.Queue()
         self.running = True
         self._notify()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -98,26 +126,111 @@ class TTSService:
         # revive a worker still loading the model, speaking a line or waiting to
         # reconnect, so two listeners spoke every line and Stop only closed one.
         self._stopping = True
+        self.ready = False
         if self._ws is not None:
             try:
                 self._ws.close()
             except Exception:
                 pass
-        sd.stop()
+        self.cancel()
 
     def _notify(self):
         if self._on_state_change:
             self._on_state_change(self.running)
 
+    # -- speaking -------------------------------------------------------------
+
+    def cancel(self):
+        """Silence the line playing now and abandon any not yet spoken."""
+        with self._lock:
+            self._generation += 1
+            if self._player is not None:
+                self._player.close()
+                self._player = None
+
+    def say(self, text, voice=None, volume=None, speed=None):
+        """Speak text that didn't come from the game: the GUI's previews and its Say
+        box. Volume and speed default to what the game would use for this voice.
+        Returns False until the model has loaded."""
+        if not self.ready:
+            return False
+        voice = voice or self.female_voice
+        default_volume, default_speed = self._playback_for(voice)
+        self._enqueue(Line(
+            apply_aliases(text, self.aliases),
+            voice,
+            default_volume if volume is None else volume,
+            default_speed if speed is None else speed,
+        ))
+        return True
+
+    def replay(self):
+        """Speak the last line from the game again. False if there's none yet or the
+        model hasn't loaded."""
+        line = self.last_line
+        if not self.ready or line is None:
+            return False
+        self._enqueue(line)
+        return True
+
+    def _enqueue(self, line):
+        # A new line supersedes whatever is being synthesized. The one playing carries
+        # on until the new line has audio to replace it with, as sd.play() did.
+        with self._lock:
+            self._generation += 1
+            self._requests.put(dataclasses.replace(line, generation=self._generation))
+
+    def _superseded(self, line):
+        return self._stopping or line.generation != self._generation
+
+    def _play(self, player, line):
+        """Start this line's playback in place of the previous one's, unless it was
+        superseded while its first sentence was being synthesized."""
+        with self._lock:
+            if self._superseded(line):
+                return False
+            if self._player is not None:
+                self._player.close()
+                self._player = None
+            player.start()
+            self._player = player
+        return True
+
+    def _playback_for(self, voice):
+        """(volume, speed) for a voice: its own override where it has one, else the
+        gender and global defaults."""
+        # The fallback volume follows the voice's own gender: comparing against
+        # female_voice only matched the one regional default, so every character
+        # using any other female voice was played at the male volume.
+        override = self.voice_settings.get(voice, {})
+        volume = override.get(
+            "volume",
+            self.female_volume
+            if voice_data.classify_gender(voice) == "female"
+            else self.male_volume,
+        )
+        return volume, override.get("speed", self.speed)
+
     # -- worker ---------------------------------------------------------------
 
     def _run(self):
+        speaker = None
         try:
             self._load()
+            # Synthesis runs on its own thread so the websocket keeps reading: a Cancel
+            # or the next line used to wait until the current one was fully synthesized.
+            speaker = threading.Thread(target=self._speak_loop, args=(self._requests,), daemon=True)
+            speaker.start()
+            self.ready = True
             self._connect()
         except Exception as exc:
             print(f"TTS stopped: {exc}")
         finally:
+            self.ready = False
+            if speaker is not None:
+                self.cancel()
+                self._requests.put(None)
+                speaker.join()
             self.running = False
             self._notify()
 
@@ -172,6 +285,44 @@ class TTSService:
     def voice_for(self, person, fallback):
         return self.voice_lookup.get(person.lower(), fallback)
 
+    def _speak_loop(self, requests):
+        while True:
+            line = requests.get()
+            if line is None:
+                return
+            try:
+                self._speak(line)
+            except Exception as exc:
+                print(f"Error speaking line: {exc}")
+
+    def _speak(self, line):
+        """Synthesize a line a sentence at a time, playing each as soon as it's ready."""
+        if self._superseded(line):
+            return
+        player = None
+        try:
+            for _, _, audio in self.pipeline(
+                line.text, voice=line.voice, speed=line.speed, split_pattern=SENTENCE_BREAK
+            ):
+                # Checked between sentences: a Cancel, a newer line or Stop abandons the
+                # rest of this one rather than waiting for it to finish synthesizing.
+                if self._superseded(line):
+                    return
+                audio = np.asarray(audio, dtype=np.float32) * line.volume
+                audio = audio_output.resample_audio(audio, KOKORO_SAMPLE_RATE, self.sample_rate)
+                if player is None:
+                    player = audio_output.LinePlayer(self.sample_rate)
+                    player.feed(audio)
+                    if not self._play(player, line):
+                        return
+                else:
+                    player.feed(audio)
+        finally:
+            # Lets the stream stop after the audio it already has, including when the
+            # line was abandoned partway. A cancelled one was closed by cancel() already.
+            if player is not None:
+                player.finish()
+
     # -- websocket ------------------------------------------------------------
 
     def _connect(self):
@@ -213,7 +364,7 @@ class TTSService:
 
             if data.get("Type") == "Cancel":
                 print("Skipping audio")
-                sd.stop()
+                self.cancel()
                 return
 
             if data.get("Type") != "Say" or self._stopping:
@@ -228,33 +379,8 @@ class TTSService:
             print(f"{speaker or 'Unknown'}: {payload}")
             print(f"  voice: {voice}")
 
-            # Volume and speed follow this voice's own override when it has one.
-            # The fallback volume follows the voice's own gender: comparing against
-            # female_voice only matched the one regional default, so every character
-            # using any other female voice was played at the male volume.
-            override = self.voice_settings.get(voice, {})
-            volume = override.get(
-                "volume",
-                self.female_volume
-                if voice_data.classify_gender(voice) == "female"
-                else self.male_volume,
-            )
-            speed = override.get("speed", self.speed)
-
-            # Synthesize the whole line before playing it. sd.play() stops whatever is
-            # still playing, so playing each chunk as soon as it was ready cut off the
-            # one before it, and a line long enough to need several chunks lost all but
-            # its end.
-            chunks = []
-            for _, _, audio in self.pipeline(payload, voice=voice, speed=speed):
-                if self._stopping:
-                    return  # Stop pressed while the line was being synthesized
-                chunks.append(np.asarray(audio, dtype=np.float32))
-            if not chunks:
-                return
-            audio = np.concatenate(chunks) * volume
-            audio = audio_output.resample_audio(audio, KOKORO_SAMPLE_RATE, self.sample_rate)
-            sd.play(audio, samplerate=self.sample_rate)
+            self.last_line = Line(payload, voice, *self._playback_for(voice))
+            self._enqueue(self.last_line)
 
         except Exception as exc:
             print(f"Error handling message: {exc}")

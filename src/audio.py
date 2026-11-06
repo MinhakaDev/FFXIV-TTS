@@ -1,4 +1,6 @@
+import collections
 import re
+import threading
 
 import numpy as np
 import sounddevice as sd
@@ -94,6 +96,63 @@ def resample_audio(audio, orig_sr, target_sr):
     orig_indices = np.arange(len(audio))
     target_indices = np.linspace(0, len(audio) - 1, num=target_length)
     return np.interp(target_indices, orig_indices, audio).astype(audio.dtype)
+
+
+class LinePlayer:
+    """Plays one line through a single output stream while it's still being synthesized.
+
+    Chunks are fed in as they're ready and played back to back, so speech starts after
+    the first sentence rather than the whole line. One stream per line also keeps the
+    fix for long lines: calling sd.play() per chunk stopped the chunk before it.
+    """
+
+    def __init__(self, sample_rate):
+        self.sample_rate = sample_rate
+        self._chunks = collections.deque()
+        self._finished = False
+        self._lock = threading.Lock()
+        self._stream = None
+
+    def feed(self, audio):
+        with self._lock:
+            self._chunks.append(audio)
+
+    def finish(self):
+        """No more chunks are coming: the stream stops once it has played what it has."""
+        with self._lock:
+            self._finished = True
+
+    def start(self):
+        self._stream = sd.OutputStream(
+            samplerate=self.sample_rate, channels=1, dtype="float32", callback=self._fill,
+        )
+        self._stream.start()
+
+    def close(self):
+        if self._stream is not None:
+            try:
+                self._stream.close()
+            except Exception:
+                pass
+
+    def _fill(self, outdata, frames, time, status):
+        # Runs on PortAudio's thread. Outputs silence while the next sentence is still
+        # being synthesized, rather than stopping.
+        written = 0
+        with self._lock:
+            while written < frames and self._chunks:
+                chunk = self._chunks[0]
+                take = min(frames - written, len(chunk))
+                outdata[written:written + take, 0] = chunk[:take]
+                written += take
+                if take == len(chunk):
+                    self._chunks.popleft()
+                else:
+                    self._chunks[0] = chunk[take:]
+            done = self._finished and not self._chunks
+        outdata[written:] = 0
+        if done:
+            raise sd.CallbackStop
 
 
 def play_test_tone(configured, seconds=0.5, frequency=440.0):
