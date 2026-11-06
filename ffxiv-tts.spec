@@ -18,7 +18,12 @@ block_cipher = None
 # into it. A bundled libasound built on the CI runner looks for them in that distro's
 # plugin directory, which doesn't exist elsewhere, so those devices silently disappear
 # from the device list and audio can't reach the user's real output.
-HOST_PROVIDED_LIBS = ('libasound.so', 'libpulse.so', 'libpulse-simple.so', 'libjack.so')
+# libpulsecommon is libpulse's private half and has to match it: the host's libpulse loads
+# whichever libpulsecommon-<version>.so it finds first, and the CI runner's copy can lack
+# symbols the host's build needs (Ubuntu 26.04's 17.0 has no pa_in_valgrind for Arch's).
+HOST_PROVIDED_LIBS = (
+    'libasound.so', 'libpulse.so', 'libpulse-simple.so', 'libpulsecommon', 'libjack.so',
+)
 
 
 def use_host_libraries(binaries):

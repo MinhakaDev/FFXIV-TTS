@@ -126,9 +126,12 @@ never touches user state; build.sh/build.bat/CI copy `lexicons/` into `dist/` th
 
 Non-obvious constraints, the first two already commented in the spec — preserve them:
 
-1. `libasound`/`libpulse`/`libjack` are stripped from the bundle so the host's copies are used.
-   A bundled libasound looks for ALSA plugins in the *build* machine's paths, which makes the
-   `pipewire`/`pulse` devices vanish on the user's machine.
+1. `libasound`/`libpulse`/`libpulsecommon`/`libjack` are stripped from the bundle so the host's
+   copies are used. A bundled libasound looks for ALSA plugins in the *build* machine's paths,
+   which makes the `pipewire`/`pulse` devices vanish on the user's machine. `libpulsecommon`
+   must come from the same place as `libpulse`: when the runner's and the host's share a
+   version name, a bundled copy shadows the host's and libpulse fails to load (seen when
+   `ubuntu-latest` became 26.04).
 2. kokoro's G2P chain (`misaki`, `phonemizer`, `segments`, `csvw`, `language_tags`,
    `espeakng_loader`) and customtkinter read data files by path, so they need `collect_all`.
    `en_core_web_sm` isn't a pip dependency — every build path runs
