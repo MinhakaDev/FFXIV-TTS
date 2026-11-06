@@ -100,7 +100,11 @@ the commit with the next patch version, and publishes a GitHub Release with both
 Nothing to run and no tags to create by hand — see
 [`.github/workflows/build.yml`](.github/workflows/build.yml).
 
-- Put `[skip ci]` in the commit message to skip a build (for README-only changes).
+- Pushes that only change Markdown files or `LICENSE` don't build, so docs edits need nothing
+  special.
+- `[skip ci]` in a commit message skips a build, but GitHub only reads it from the newest
+  commit of a push, so it also skips any code commits pushed along with it. Push those
+  separately, or leave the marker off.
 - Bumping the minor or major version is the one manual step: create that tag yourself
   (`git tag v0.2.0 && git push origin v0.2.0`) and subsequent pushes continue from it.
 - Running the workflow by hand from the Actions tab builds downloadable artifacts **without**
