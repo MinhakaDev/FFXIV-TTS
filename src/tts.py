@@ -9,6 +9,7 @@ import dataclasses
 import json
 import os
 import queue
+import string
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -39,10 +40,15 @@ REGION_VOICES = {
     "US": ("a", "am_puck", "af_heart"),
     "UK": ("b", "bm_fable", "bf_emma"),
 }
+# settings["engine"] values for Qwen3-TTS, and the model size each loads. Anything
+# else is Kokoro.
+QWEN_ENGINES = {"qwen3-0.6b": "0.6b", "qwen3-1.7b": "1.7b"}
 # Kokoro synthesizes up to ~510 phonemes as one piece, which is most dialogue lines
 # whole. Splitting at sentence ends lets the first sentence play while the rest is
 # still being synthesized. The second alternative catches a sentence ending in a quote.
 SENTENCE_BREAK = r'(?<=[.!?…])\s+|(?<=[.!?…]["”’])\s+'
+# Stripped off a word before looking it up in the aliases, so "Minhaka," still matches.
+WORD_EDGES = string.punctuation + "“”‘’…"
 
 
 @dataclasses.dataclass
@@ -51,13 +57,20 @@ class Line:
     voice: str
     volume: float
     speed: float
+    # Who says it, when known: Qwen3-TTS gives a character their own voice.
+    person: str = ""
     # Set when queued. A line whose generation is no longer current has been
     # superseded by a newer one or a Cancel, and is abandoned.
     generation: int = 0
 
 
-def parse_pls(filename, aliases):
-    """Read one PLS file, returning its phonemes and filling in `aliases`."""
+def parse_pls(filename, aliases, use_phonemes=True):
+    """Read one PLS file, returning its phonemes and filling in `aliases`.
+
+    A lexeme with both (the Name screen writes one: IPA for Kokoro, a respelling for
+    Qwen3-TTS) gives its phoneme to an engine that reads them, and its alias otherwise.
+    No vendored lexeme has both.
+    """
     lexicon = {}
     try:
         root = ET.parse(filename).getroot()
@@ -76,7 +89,7 @@ def parse_pls(filename, aliases):
             for grapheme in graphemes:
                 if phoneme:
                     lexicon[grapheme] = phoneme
-                if alias:
+                if alias and not (phoneme and use_phonemes):
                     aliases[grapheme] = alias
     except Exception as exc:
         print(f"Error parsing PLS file {filename}: {exc}")
@@ -84,7 +97,19 @@ def parse_pls(filename, aliases):
 
 
 def apply_aliases(text, aliases):
-    return " ".join(aliases.get(word, word) for word in text.split())
+    return " ".join(_alias(word, aliases) for word in text.split())
+
+
+def _alias(word, aliases):
+    if word in aliases:
+        return aliases[word]
+    # Dialogue puts punctuation against names ("Minhaka!"), which kept their alias
+    # from ever matching.
+    core = word.strip(WORD_EDGES)
+    if core and core in aliases:
+        start = word.index(core)
+        return word[:start] + aliases[core] + word[start + len(core):]
+    return word
 
 
 class TTSService:
@@ -107,6 +132,12 @@ class TTSService:
         self._lock = threading.Lock()
         self._generation = 0
         self._player = None
+        # The Qwen3-TTS engine when settings pick it; Kokoro's pipeline otherwise.
+        self.qwen = None
+        # settings["engine"] and ["region"] as of the last Start, which changing takes
+        # a restart: the GUI compares them with what's saved.
+        self.engine = None
+        self.region = None
 
     # -- lifecycle ------------------------------------------------------------
 
@@ -134,6 +165,19 @@ class TTSService:
                 pass
         self.cancel()
 
+    @property
+    def stopping(self):
+        """True between stop() and the worker having exited."""
+        return self.running and self._stopping
+
+    def refresh_settings(self):
+        """Apply what the GUI saved since Start: speed, volume, voices.json and the
+        lexicons. The engine, region and audio device take a restart."""
+        if not self.ready:
+            return
+        self._apply_settings(self._read_settings())
+        self._load_lexicons()
+
     def _notify(self):
         if self._on_state_change:
             self._on_state_change(self.running)
@@ -148,7 +192,7 @@ class TTSService:
                 self._player.close()
                 self._player = None
 
-    def say(self, text, voice=None, volume=None, speed=None):
+    def say(self, text, voice=None, volume=None, speed=None, person=None):
         """Speak text that didn't come from the game: the GUI's previews and its Say
         box. Volume and speed default to what the game would use for this voice.
         Returns False until the model has loaded."""
@@ -161,6 +205,7 @@ class TTSService:
             voice,
             default_volume if volume is None else volume,
             default_speed if speed is None else speed,
+            person=person or "",
         ))
         return True
 
@@ -172,6 +217,11 @@ class TTSService:
             return False
         self._enqueue(line)
         return True
+
+    def reload_voice(self, name):
+        """Use a Qwen3-TTS voice clip the Voices screen just made, from the next line."""
+        if self.qwen is not None:
+            self.qwen.reload(name)
 
     def _enqueue(self, line):
         # A new line supersedes whatever is being synthesized. The one playing carries
@@ -202,7 +252,9 @@ class TTSService:
         # The fallback volume follows the voice's own gender: comparing against
         # female_voice only matched the one regional default, so every character
         # using any other female voice was played at the male volume.
-        override = self.voice_settings.get(voice, {})
+        # Tuning's overrides are per Kokoro voice, which Qwen3-TTS doesn't speak with, so
+        # the GUI hides that screen under it and they don't apply.
+        override = self.voice_settings.get(voice, {}) if self.qwen is None else {}
         volume = override.get(
             "volume",
             self.female_volume
@@ -221,7 +273,10 @@ class TTSService:
             # or the next line used to wait until the current one was fully synthesized.
             speaker = threading.Thread(target=self._speak_loop, args=(self._requests,), daemon=True)
             speaker.start()
-            self.ready = True
+            if not self._stopping:
+                self.ready = True
+                # So the Run screen can say it's loaded.
+                self._notify()
             self._connect()
         except Exception as exc:
             print(f"TTS stopped: {exc}")
@@ -231,29 +286,41 @@ class TTSService:
                 self.cancel()
                 self._requests.put(None)
                 speaker.join()
+            if self.qwen is not None:
+                # Gives the GPU memory back, or switching engines would keep it.
+                self.qwen.close()
+                self.qwen = None
             self.running = False
             self._notify()
 
-    def _load(self):
-        settings_path = os.path.join(paths.settings_dir(), "settings.json")
-        with open(settings_path, "r", encoding="utf-8") as f:
-            settings = json.load(f)
+    def _read_settings(self):
+        with open(os.path.join(paths.settings_dir(), "settings.json"), "r", encoding="utf-8") as f:
+            return json.load(f)
 
-        lang_code, self.male_voice, self.female_voice = REGION_VOICES.get(
-            settings.get("region", "US"), REGION_VOICES["US"]
-        )
+    def _apply_settings(self, settings):
+        """The settings that can change while running, since they're only looked up
+        per line."""
         self.speed = settings.get("speed", 1.0)
         self.male_volume = settings.get("malevolume", 0.7)
         self.female_volume = settings.get("femalevolume", 0.7)
         # Per-voice {voice_id: {"volume", "speed"}} overrides layered over the
         # gender/global defaults above; voices absent here use those defaults.
         self.voice_settings = settings.get("voice_settings", {})
-        print(f"Using male voice {self.male_voice} and female voice {self.female_voice}")
-
         self.voice_lookup = voice_data.build_lookup(
             voice_data.load(os.path.join(paths.settings_dir(), "voices.json"))
         )
         print(f"Loaded {len(self.voice_lookup)} character voices")
+
+    def _load(self):
+        settings = self._read_settings()
+        self.engine = settings.get("engine", "kokoro")
+        self.region = settings.get("region", "US")
+
+        lang_code, self.male_voice, self.female_voice = REGION_VOICES.get(
+            self.region, REGION_VOICES["US"]
+        )
+        print(f"Using male voice {self.male_voice} and female voice {self.female_voice}")
+        self._apply_settings(settings)
 
         try:
             device_name, self.sample_rate = audio_output.activate_output_device(
@@ -265,21 +332,37 @@ class TTSService:
             print(f"Could not configure output device, defaulting to {KOKORO_SAMPLE_RATE}: {exc}")
             self.sample_rate = KOKORO_SAMPLE_RATE
 
-        # Imported here rather than at module scope: it pulls in torch and takes
-        # several seconds, which would otherwise stall the app before it appears.
         print("Loading the speech model, this can take a moment...")
-        from kokoro import KPipeline
+        if self.engine in QWEN_ENGINES:
+            import qwen_engine
 
-        self.pipeline = KPipeline(lang_code=lang_code)
+            print(f"Using Qwen3-TTS {QWEN_ENGINES[self.engine].upper()} (test). It speaks at its own pace: "
+                  "the speed settings only apply to Kokoro.")
+            # Stop interrupts the first Start's download rather than waiting it out.
+            self.qwen = qwen_engine.QwenEngine(QWEN_ENGINES[self.engine], lambda: self._stopping)
+            self.synthesis_rate = qwen_engine.SAMPLE_RATE
+        else:
+            # Imported here rather than at module scope: it pulls in torch and takes
+            # several seconds, which would otherwise stall the app before it appears.
+            from kokoro import KPipeline
 
-        self.aliases = {}
+            self.pipeline = KPipeline(lang_code=lang_code)
+            self.synthesis_rate = KOKORO_SAMPLE_RATE
+        self._load_lexicons()
+
+    def _load_lexicons(self):
+        # Qwen3-TTS reads plain text, so only the lexicons' word replacements apply.
+        use_phonemes = self.qwen is None
+        phonemes = self.pipeline.g2p.lexicon.golds if use_phonemes else {}
+        aliases = {}
         for name in LEXICON_DIRECTORIES:
             directory = os.path.join(paths.lexicons_dir(), name)
             for root, _, files in os.walk(directory):
                 for file in files:
                     if file.endswith(".pls"):
                         path = os.path.join(root, file)
-                        self.pipeline.g2p.lexicon.golds.update(parse_pls(path, self.aliases))
+                        phonemes.update(parse_pls(path, aliases, use_phonemes))
+        self.aliases = aliases
         print(f"Loaded pronunciation lexicons ({len(self.aliases)} replacements)")
 
     def voice_for(self, person, fallback):
@@ -295,21 +378,31 @@ class TTSService:
             except Exception as exc:
                 print(f"Error speaking line: {exc}")
 
+    def _synthesize(self, line):
+        """The line's audio a piece at a time: a sentence from Kokoro, a few frames
+        from Qwen3-TTS, which streams."""
+        if self.qwen is not None:
+            return self.qwen.speak(line.text, line.voice, line.person, lambda: self._superseded(line))
+        return (
+            audio for _, _, audio in self.pipeline(
+                line.text, voice=line.voice, speed=line.speed, split_pattern=SENTENCE_BREAK
+            )
+        )
+
     def _speak(self, line):
-        """Synthesize a line a sentence at a time, playing each as soon as it's ready."""
+        """Synthesize a line a piece at a time, playing each as soon as it's ready."""
         if self._superseded(line):
             return
         player = None
+        chunks = self._synthesize(line)
         try:
-            for _, _, audio in self.pipeline(
-                line.text, voice=line.voice, speed=line.speed, split_pattern=SENTENCE_BREAK
-            ):
-                # Checked between sentences: a Cancel, a newer line or Stop abandons the
+            for audio in chunks:
+                # Checked between pieces: a Cancel, a newer line or Stop abandons the
                 # rest of this one rather than waiting for it to finish synthesizing.
                 if self._superseded(line):
                     return
                 audio = np.asarray(audio, dtype=np.float32) * line.volume
-                audio = audio_output.resample_audio(audio, KOKORO_SAMPLE_RATE, self.sample_rate)
+                audio = audio_output.resample_audio(audio, self.synthesis_rate, self.sample_rate)
                 if player is None:
                     player = audio_output.LinePlayer(self.sample_rate)
                     player.feed(audio)
@@ -318,6 +411,8 @@ class TTSService:
                 else:
                     player.feed(audio)
         finally:
+            # Stops a Qwen3-TTS synthesis still running for an abandoned line.
+            chunks.close()
             # Lets the stream stop after the audio it already has, including when the
             # line was abandoned partway. A cancelled one was closed by cancel() already.
             if player is not None:
@@ -377,9 +472,9 @@ class TTSService:
             fallback = self.female_voice if reported_gender == "female" else self.male_voice
             voice = self.voice_for(speaker, fallback)
             print(f"{speaker or 'Unknown'}: {payload}")
-            print(f"  voice: {voice}")
+            print(f"  voice: {self.qwen.voice_name(speaker, voice) if self.qwen else voice}")
 
-            self.last_line = Line(payload, voice, *self._playback_for(voice))
+            self.last_line = Line(payload, voice, *self._playback_for(voice), person=speaker)
             self._enqueue(self.last_line)
 
         except Exception as exc:

@@ -30,7 +30,7 @@ def _parse(tag):
     return tuple(int(part) for part in match.groups()) if match else None
 
 
-def _tls_context():
+def tls_context():
     """The system's CA certificates plus certifi's bundle.
 
     The Linux release bundles the CI runner's (Ubuntu's) OpenSSL, which looks for CA
@@ -48,7 +48,7 @@ def _latest_release(timeout):
         RELEASES_API,
         headers={"Accept": "application/vnd.github+json", "User-Agent": "ffxiv-tts"},
     )
-    with urllib.request.urlopen(request, timeout=timeout, context=_tls_context()) as response:
+    with urllib.request.urlopen(request, timeout=timeout, context=tls_context()) as response:
         data = json.load(response)
     return data.get("tag_name"), data.get("html_url") or RELEASES_PAGE
 

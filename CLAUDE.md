@@ -66,8 +66,12 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   absent from `voices.json`. Comparing against `female_voice` instead was a real bug: it
   matched only the one regional default, so every other female voice played at the male volume.
 - **`settings_gui.py`** — sidebar of `Screen` subclasses (Run/General/Tuning/Name/Voices/Audio),
-  registered in `SettingsApp.SCREENS`. Screens are built once and kept; `SettingsApp.show()`
-  calls the incoming screen's `on_show()`, which is how Tuning picks up defaults General saved.
+  registered in `SettingsApp.SCREENS`; under Qwen3 the Voices button opens `QwenVoicesScreen`
+  instead (`SettingsApp.QWEN_SCREENS`, resolved by `screen_for()`) and Tuning leaves the
+  sidebar (`KOKORO_ONLY`). Screens are built once and kept; `SettingsApp.show()`
+  calls the incoming screen's `on_show()`, which is how Tuning picks up defaults General saved,
+  and the outgoing one's `on_hide()`, which is how `QwenVoicesScreen` frees the VoiceDesign
+  model's 2 GB.
   `SettingsApp` tees both `sys.stdout` and `sys.stderr` through `LogStream` into the Run
   screen's log, after building every screen. Tk isn't thread-safe: other threads hand log
   lines and the update-check result to `RunScreen` through queues that its `drain()` loop
@@ -78,11 +82,23 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   GUI's fallback for keys missing from the file: new installs get their actual defaults from
   the shipped `settings/settings.json` (speed 1.3, not 1.0), and `tts._load()` reads the file
   itself with its own `.get()` fallbacks, so a new runtime setting needs a fallback there too.
-  Tuning overrides store only the values that differ from the General defaults. Every screen
-  gets the `TTSService`; the Preview buttons (Tuning, Name, a Voices row) and the Run screen's
-  Say box and Replay need the model loaded, so they go through `speech_ready()`, which tells
-  the user to press Start first. Name's Preview speaks the unsaved IPA through misaki's
-  `[word](/phonemes/)` markup, since the saved lexicon only loads at Start.
+  Tuning overrides store only the values that differ from the General defaults, and are per
+  Kokoro voice, so they don't apply under Qwen3. Every screen gets the `TTSService`; the
+  Preview buttons (General, Tuning, Name, a Voices row) and the Run screen's Say box and Replay
+  need the model loaded, so they go through `speech_ready()`, which offers to Start it. The
+  sidebar and Name follow the *saved* engine (`saved_engine()`, read in `on_show()`; Name asks
+  for a respelling instead of IPA under Qwen3, and the Run screen's Say box offers the
+  default voices). Picking an engine on General saves it at once, without Save, and restarts
+  a running TTS: saved only by Save, General showed one engine while Start loaded another.
+  Under Qwen3 it hides region and speed (`Screen.show_row()`). Each engine compares itself in
+  a `Tooltip` on hover, reached through CTkSegmentedButton's private `_buttons_dict`: it has no
+  public way to get at one segment, so check it when bumping customtkinter (unpinned). Saves call
+  `TTSService.refresh_settings()`, so speed, volume, voices.json and the lexicons apply from
+  the next line; the engine, region and audio device only load at Start, so General (for
+  Kokoro's region) and Audio offer `RunScreen.restart()`, which starts again from
+  `show_state()` once the old worker has exited. Name's Preview speaks the unsaved IPA through misaki's
+  `[word](/phonemes/)` markup. `QwenVoicesScreen` lists names a group at a time (the defaults,
+  each expansion, other names): one dropdown of every voice ran off the bottom of the screen.
 - **`voices.py`** — shared character→voice data plus Kokoro's published quality grades. The
   picker sorts females first, then by grade, since every male voice is C+ or below.
   `classify_gender()` reads the id's second letter (Kokoro ids are `<lang><gender>_<name>`).
@@ -92,6 +108,25 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   (those indices shift between boots and when a wireless headset sleeps), and
   `refresh_devices()` tears down and re-initialises PortAudio because it caches the device list
   at init, hiding anything switched on after launch.
+- **`qwen_engine.py`** — a second engine under test: Qwen3-TTS through qwentts.cpp's C library
+  via ctypes, picked on the General screen (`settings["engine"]` `qwen3-0.6b`/`qwen3-1.7b`;
+  anything else is Kokoro). Its first Start downloads what's missing into `qwen3-tts/`
+  (gitignored, never zipped): the library from the `qwen3-runtime-<commit>` pre-release, and
+  the GGUFs from one pinned Hugging Face revision, checked against `MODELS`' sha256s. A
+  `.part` file resumes, and Stop interrupts. `tools/setup_qwen3.sh` builds the library locally
+  instead. `QWENTTS_COMMIT` is the one place the qwentts.cpp version lives: the setup script
+  and the runtime workflow read it, and the ctypes structs mirror its `qwen.h`, so check them
+  against the header before bumping it. The voices are clips in `qwen3-voices/`, committed,
+  that the VoiceDesign model invented from the descriptions in `qwen3-voices/designs.json`, so
+  none is a real person's. The Voices screen under Qwen3 makes one at a time (a new random seed
+  per Design; Keep saves the clip and its seed, and `TTSService.reload_voice()` swaps it into
+  the running engine); `tools/design_voices.py` remakes any from their saved seed. The Base
+  model clones them, choosing the character's own, else `GENDER_VOICES` (`default female` /
+  `default male`) by their Kokoro voice's gender, and looks for them before downloading
+  anything. The clips named after Kokoro voices (`af_heart`...) are what characters fell back on
+  before the defaults; nothing uses them now. It reads plain text, so
+  only the lexicons' `<alias>` entries apply, and it ignores the speed settings. `speak()` reads
+  `_latents` once: `reload()` runs on the UI thread and can drop an entry mid-lookup.
 - **`updates.py`** / **`version.py`** — update check against the GitHub Releases API. It only
   *detects* a newer release and links to the download page; it never replaces the binary. TLS
   is verified against the system store plus certifi's bundle, because the Linux build's
@@ -115,7 +150,7 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
 The app writes to both `settings/` and `lexicons/` at runtime, so they live as **editable
 folders beside the executable**. The spec bundles only read-only copies of
 `settings/settings.json` and `settings/voices.json` (for `defaults.py`). Release zips hold the
-binary plus `lexicons/` without `Your-Name/lexicon.pls`, so unzipping an update over an install
+binary plus `lexicons/` without `Your-Name/lexicon.pls` (and `qwen3-voices/`), so unzipping an update over an install
 never touches user state; build.sh/build.bat/CI copy `lexicons/` into `dist/` that way.
 
 - `settings/settings.json` — region (US/UK picks the Kokoro `lang_code` and default voices),
@@ -126,8 +161,11 @@ never touches user state; build.sh/build.bat/CI copy `lexicons/` into `dist/` th
 - `lexicons/*/lexicon.pls` — W3C PLS pronunciation files, vendored from
   [TextToTalk](https://github.com/karashiiro/TextToTalk/tree/main/lexicons). `<phoneme>` entries
   are pushed into `pipeline.g2p.lexicon.golds`; `<alias>` entries become plain word
-  substitutions applied before synthesis. The Name screen rewrites `Your-Name/lexicon.pls`
-  wholesale; it's the user's file, so builds leave it out. `LEXICON_DIRECTORIES` is a **whitelist, not a
+  substitutions applied before synthesis, matched with punctuation stripped off the word's ends
+  ("Minhaka!"). The Name screen rewrites `Your-Name/lexicon.pls` wholesale, with one lexeme
+  holding both the IPA (`<phoneme>`, Kokoro) and a respelling (`<alias>`, Qwen3): `parse_pls()`
+  gives a lexeme with both to each engine its own way, and no vendored lexeme has both. It's
+  the user's file, so builds leave it out. `LEXICON_DIRECTORIES` is a **whitelist, not a
   directory scan** — `lexicons/` also holds packages (`Characters-Locations-Polly`,
   `Yugiri-Western-Pronunciation`) that deliberately contradict `Characters-Locations-System`,
   so they stay unlisted and inert. Merge order is the tuple's order and a later entry wins
@@ -169,3 +207,8 @@ so they keep the update check off — use that to test a build. upload-artifact 
 permissions, so the release job restores the Linux binary's execute bit before zipping.
 PyInstaller can't cross-compile, so the Windows `.exe` can only come from CI or a Windows
 machine.
+
+`qwen3-runtime.yml` is separate: pushing the tag `qwen3-runtime-<first 7 of QWENTTS_COMMIT>`
+(from any branch) builds the Qwen3-TTS library for Linux and Windows with the LunarG Vulkan
+SDK and publishes it as a **pre-release**. It must stay one: the update check reads
+`/releases/latest`, which skips pre-releases.

@@ -18,6 +18,10 @@ if exist dist\lexicons\Your-Name\lexicon.pls move /Y dist\lexicons\Your-Name\lex
 if exist dist\lexicons rmdir /S /Q dist\lexicons
 ren dist\lexicons.new lexicons
 
+rem The Qwen3-TTS voices ship like lexicons\; the engine downloads everything else itself.
+if exist dist\qwen3-voices rmdir /S /Q dist\qwen3-voices
+if exist qwen3-voices xcopy /E /I /Y qwen3-voices dist\qwen3-voices
+
 echo Build ready in dist\: ffxiv-tts.exe and lexicons\ (settings\ is created on first run)
 goto :eof
 

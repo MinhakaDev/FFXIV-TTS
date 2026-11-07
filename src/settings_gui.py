@@ -1,15 +1,21 @@
 import json
 import os
 import queue
+import random
 import sys
+import threading
+import time
 import tkinter as tk
 import webbrowser
+import xml.etree.ElementTree as ET
 from tkinter import messagebox
+from xml.sax.saxutils import escape
 
 import customtkinter as ctk
 
 import audio as audio_output
 import paths
+import qwen_engine
 import tts
 import updates
 import voices as voice_data
@@ -31,7 +37,16 @@ MUTED_TEXT = ("gray10", "gray90")
 # What Voice Tuning's Preview says: two sentences, so there's enough to judge the speed.
 PREVIEW_LINE = "Well met, adventurer. The Scions have need of you once more."
 
+# General's engine picker: label -> settings["engine"] (see tts.QWEN_ENGINES).
+ENGINES = {"Kokoro": "kokoro", "Qwen3 0.6B": "qwen3-0.6b", "Qwen3 1.7B": "qwen3-1.7b"}
+ENGINE_LABELS = {engine: label for label, engine in ENGINES.items()}
+# {"default female": "female", ...}: Qwen3's voices for whoever has none of their own,
+# which the Run screen's Say box offers under Qwen3 in place of Kokoro's.
+DEFAULT_GENDERS = {name: gender for gender, name in qwen_engine.GENDER_VOICES.items()}
+QWEN_SAY_CHOICES = [name.capitalize() for name in DEFAULT_GENDERS]
+
 DEFAULT_SETTINGS = {
+    "engine": "kokoro",
     "region": "US",
     "speed": 1.0,
     "malevolume": 0.7,
@@ -65,6 +80,16 @@ def update_settings(**changes):
     return settings
 
 
+def is_qwen(engine):
+    return engine in tts.QWEN_ENGINES
+
+
+def saved_engine():
+    """The engine the next Start loads. Screens follow this one, so they show the
+    settings that apply to it."""
+    return load_settings().get("engine", "kokoro")
+
+
 def load_records():
     """voices.json as a flat, editable list of {expansion, person, voice}."""
     data = voice_data.load(VOICES_PATH)
@@ -88,33 +113,58 @@ def save_records(records):
     voice_data.save(VOICES_PATH, data)
 
 
-def build_name_lexicon(name, pronunciation):
-    name_upper = name[0].upper() + name[1:]
-    name_lower = name[0].lower() + name[1:]
+def build_name_lexicon(name, pronunciation, respelling):
+    """The name's lexeme: the IPA for Kokoro, and the respelling, an alias, for Qwen3-TTS,
+    which reads plain text. tts.parse_pls() gives each engine its own."""
+    name_upper = escape(name[0].upper() + name[1:])
+    name_lower = escape(name[0].lower() + name[1:])
+    entries = "".join(
+        f"\n        <{tag}>{escape(value)}</{tag}>"
+        for tag, value in (("phoneme", pronunciation), ("alias", respelling)) if value
+    )
     return f"""<?xml version='1.0' encoding='UTF-8'?>
 <lexicon xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.0"
     xsi:schemaLocation="http://www.w3.org/2005/01/pronunciation-lexicon http://www.w3.org/TR/2007/CR-pronunciation-lexicon-20071212/pls.xsd"
     alphabet="ipa" xml:lang="en" xmlns="http://www.w3.org/2005/01/pronunciation-lexicon">
     <lexeme>
         <grapheme>{name_lower}</grapheme>
-        <grapheme>{name_upper}</grapheme>
-        <phoneme>{pronunciation}</phoneme>
+        <grapheme>{name_upper}</grapheme>{entries}
     </lexeme>
 </lexicon>"""
 
 
+def load_name_lexicon():
+    """(name, IPA, respelling) as the Name screen last saved them, blank where unset."""
+    try:
+        lexeme = ET.parse(NAME_LEXICON_PATH).getroot().find(f"{tts.PLS_NAMESPACE}lexeme")
+    except (OSError, ET.ParseError):
+        return "", "", ""
+    if lexeme is None:
+        return "", "", ""
+
+    def text(tag):
+        element = lexeme.find(f"{tts.PLS_NAMESPACE}{tag}")
+        return (element.text or "").strip() if element is not None else ""
+
+    # The capitalized grapheme, written last, is the name as it appears in game.
+    graphemes = [g.text.strip() for g in lexeme.findall(f"{tts.PLS_NAMESPACE}grapheme") if g.text]
+    return (graphemes[-1] if graphemes else ""), text("phoneme"), text("alias")
+
+
 def speech_ready(service):
-    """True when the speech model is loaded, so previews can play. Otherwise says why not."""
+    """True when the speech model is loaded, so previews can play. Otherwise says why
+    not, offering to start it."""
     if service.ready:
         return True
     if service.running:
         messagebox.showinfo("Still loading", "The speech model is still loading. Try again in a moment.")
-    else:
-        messagebox.showinfo(
-            "Press Start first",
-            "Previews use the speech model, which loads when you press Start on the Run\n"
-            "screen. The game doesn't need to be running.",
-        )
+    elif messagebox.askyesno(
+        "Start the speech model?",
+        f"Previews use the speech model ({ENGINE_LABELS.get(saved_engine(), 'Kokoro')}), which "
+        "loads when the TTS starts. The game doesn't need to be running.\n\n"
+        "Start it now? Try again once the Run screen says it's running.",
+    ):
+        service.start()
     return False
 
 
@@ -138,6 +188,60 @@ def open_in_browser(url):
         os.environ.pop("LD_LIBRARY_PATH", None)
         if saved is not None:
             os.environ["LD_LIBRARY_PATH"] = saved
+
+
+class Tooltip:
+    """Text that appears under a widget while the pointer rests on it."""
+
+    DELAY_MS = 350
+
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.window = None
+        self.pending = None
+        # CTk widgets bind with add=True already; their hover colours keep working.
+        widget.bind("<Enter>", lambda _: self._schedule(), add="+")
+        widget.bind("<Leave>", self._leave, add="+")
+        widget.bind("<ButtonPress>", lambda _: self.hide(), add="+")
+
+    def _schedule(self):
+        if self.pending is None and self.window is None:
+            self.pending = self.widget.after(self.DELAY_MS, self.show)
+
+    def _leave(self, event):
+        # A CTk button is a canvas with a label on it, and crossing from one to the
+        # other fires Leave: only hide once the pointer is off the whole widget.
+        under = self.widget.winfo_containing(event.x_root, event.y_root)
+        path = str(self.widget)
+        if under is not None and (str(under) == path or str(under).startswith(path + ".")):
+            return
+        self.hide()
+
+    def show(self):
+        self.pending = None
+        dark = ctk.get_appearance_mode() == "Dark"
+        self.window = window = tk.Toplevel(self.widget)
+        window.wm_overrideredirect(True)
+        # The window's own colour shows as a one-pixel border around the label.
+        window.configure(bg="gray35" if dark else "gray65")
+        frame = ctk.CTkFrame(window, corner_radius=0, fg_color="gray17" if dark else "gray97")
+        frame.pack(padx=1, pady=1)
+        ctk.CTkLabel(
+            frame, text=self.text, justify="left", anchor="w",
+            text_color="gray90" if dark else "gray10", font=ctk.CTkFont(size=12),
+        ).pack(padx=12, pady=10)
+        window.wm_geometry(
+            f"+{self.widget.winfo_rootx()}+{self.widget.winfo_rooty() + self.widget.winfo_height() + 6}"
+        )
+
+    def hide(self):
+        if self.pending is not None:
+            self.widget.after_cancel(self.pending)
+            self.pending = None
+        if self.window is not None:
+            self.window.destroy()
+            self.window = None
 
 
 class LogStream:
@@ -190,16 +294,32 @@ class Screen(ctk.CTkFrame):
         ctk.CTkLabel(
             header, text=self.title, font=ctk.CTkFont(size=22, weight="bold"), anchor="w"
         ).pack(anchor="w")
+        # Kept, since some screens reword it for the engine.
+        self.subtitle_label = ctk.CTkLabel(
+            header, text=self.subtitle, font=ctk.CTkFont(size=12),
+            text_color=("gray45", "gray60"), anchor="w", justify="left",
+        )
         if self.subtitle:
-            ctk.CTkLabel(
-                header, text=self.subtitle, font=ctk.CTkFont(size=12),
-                text_color=("gray45", "gray60"), anchor="w", justify="left",
-            ).pack(anchor="w", pady=(2, 0))
+            self.subtitle_label.pack(anchor="w", pady=(2, 0))
 
         self.body = ctk.CTkFrame(self, fg_color="transparent")
         self.body.grid(row=1, column=0, sticky="nsew", padx=28, pady=18)
         self.body.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(1, weight=1)
+        self._row_widgets = {}
+
+    def show_row(self, row, visible):
+        """Show or hide everything on one row of the body, for settings that only
+        apply to one engine."""
+        # Collected while the row is still shown: grid_slaves() skips hidden widgets.
+        if row not in self._row_widgets:
+            self._row_widgets[row] = self.body.grid_slaves(row=row)
+        for widget in self._row_widgets[row]:
+            # grid_remove() keeps each widget's options, so a bare grid() puts it back.
+            if visible:
+                widget.grid()
+            else:
+                widget.grid_remove()
 
     def field(self, row, label):
         ctk.CTkLabel(self.body, text=label, anchor="w").grid(
@@ -232,6 +352,17 @@ class Screen(ctk.CTkFrame):
     def on_show(self):
         """Called each time the sidebar switches to this screen."""
 
+    def on_hide(self):
+        """Called each time the sidebar switches away from this screen."""
+
+    def hint(self, row, text):
+        label = ctk.CTkLabel(
+            self.body, text=text, font=ctk.CTkFont(size=11), text_color=("gray45", "gray60"),
+            anchor="w", justify="left",
+        )
+        label.grid(row=row, column=1, sticky="w")
+        return label
+
 
 class RunScreen(Screen):
     title = "FFXIV TTS"
@@ -241,6 +372,8 @@ class RunScreen(Screen):
         super().__init__(parent, service)
         self.messages = queue.Queue()
         self.update_result = queue.Queue()
+        # Set by restart(): start again once the stop it asked for has finished.
+        self.restart_pending = False
 
         # Update banner: gridded on row 0 but removed until a newer release is found,
         # so it takes no space when there's nothing to announce.
@@ -312,6 +445,14 @@ class RunScreen(Screen):
         # a dev build's check returns at once, while the other screens are still being built.
         updates.check_async(self.update_result.put)
 
+    def on_show(self):
+        # General may have picked another engine: list its voices, and say which loads.
+        choices = QWEN_SAY_CHOICES if is_qwen(saved_engine()) else VOICE_CHOICES
+        if list(self.say_voice.cget("values")) != choices:
+            self.say_voice.configure(values=choices)
+            self.say_voice.set(choices[0])
+        self.show_state()
+
     def show_update(self, result):
         if not result:
             return
@@ -354,12 +495,20 @@ class RunScreen(Screen):
         if self.service.running:
             self.append("Stopping...")
             # The worker may still be loading the model or finishing a line; it reports
-            # back through set_running() once it has really exited.
+            # back through show_state() once it has really exited.
             self.status.configure(text="Stopping...")
             self.button.configure(state="disabled")
             self.service.stop()
         else:
             self.service.start()
+
+    def restart(self):
+        """Stop, then Start once the worker has exited, so a new engine or region loads."""
+        if not self.service.running:
+            self.service.start()
+            return
+        self.restart_pending = True
+        self.toggle()
 
     def replay(self):
         if speech_ready(self.service) and not self.service.replay():
@@ -367,43 +516,191 @@ class RunScreen(Screen):
 
     def say(self):
         text = self.say_text.get().strip()
-        if text and speech_ready(self.service):
-            self.service.say(text, voice_data.voice_from_description(self.say_voice.get()))
+        if not text or not speech_ready(self.service):
+            return
+        choice = self.say_voice.get()
+        default = DEFAULT_GENDERS.get(choice.lower())
+        if default:
+            # Qwen3's default for a gender speaks for any voice of that gender.
+            voice = self.service.female_voice if default == "female" else self.service.male_voice
+        else:
+            voice = voice_data.voice_from_description(choice)
+        self.service.say(text, voice)
 
-    def set_running(self, running):
-        self.status.configure(text="Running" if running else "Stopped")
-        self.button.configure(text="Stop" if running else "Start", state="normal")
+    def show_state(self):
+        """Reads the service rather than taking the state it notified: notifications
+        queue up, and only the latest state matters."""
+        service = self.service
+        if not service.running:
+            if self.restart_pending:
+                self.restart_pending = False
+                service.start()
+                return
+            # The engine is picked on General; say which one Start loads.
+            text = f"Stopped. Start loads {ENGINE_LABELS.get(saved_engine(), 'Kokoro')}."
+        elif service.stopping:
+            text = "Stopping..."
+        elif service.ready:
+            text = f"Running: {ENGINE_LABELS.get(service.engine, 'Kokoro')}"
+        else:
+            text = "Loading the speech model..."
+        self.status.configure(text=text)
+        self.button.configure(
+            text="Stop" if service.running else "Start",
+            state="disabled" if service.stopping else "normal",
+        )
 
 
 class GeneralScreen(Screen):
     title = "General"
-    subtitle = "Language and how loud each voice speaks."
+    subtitle = ("Speech engine, language and how loud each voice speaks.\n"
+                "Hover over an engine to compare them.")
+
+    ABOUT = {
+        "kokoro": "Characters speak with the Kokoro voices you assign them on the Voices screen.",
+        "qwen3": "A test. Each character speaks with a voice of their own, made on the Voices\n"
+                 "screen, and the rest with a default female or male one.",
+    }
+    # Shown while the pointer rests on an engine.
+    COMPARISON = {
+        "Kokoro": "Kokoro: fast and light, but plainer\n\n"
+                  "+ Runs well on the processor: no graphics card needed\n"
+                  "+ Quick to start speaking, and leaves the graphics card to the game\n"
+                  "+ Small download (about 330 MB)\n"
+                  "+ Speed setting, and names said exactly from IPA\n"
+                  "- Flatter, less expressive than Qwen3\n"
+                  "- A few dozen stock voices, shared between characters",
+        "Qwen3 0.6B": "Qwen3 0.6B: more natural voices, the lighter Qwen3\n\n"
+                      "+ More natural and expressive than Kokoro\n"
+                      "+ Every character can have a voice of their own\n"
+                      "+ Faster and lighter than 1.7B\n"
+                      "- Needs a graphics card to keep up: slow on the processor\n"
+                      "- Rougher than 1.7B\n"
+                      "- Downloads 1.3 GB, and uses graphics memory the game wants\n"
+                      "- No speed setting, and still a test",
+        "Qwen3 1.7B": "Qwen3 1.7B: the best voices, the heaviest\n\n"
+                      "+ The most natural and expressive voices here\n"
+                      "+ Every character can have a voice of their own\n"
+                      "- Needs a graphics card, with more memory than 0.6B\n"
+                      "- Slower than 0.6B to start each line\n"
+                      "- Downloads 2.4 GB\n"
+                      "- No speed setting, and still a test",
+    }
+    # Kokoro's alone: the region picks its default voices and accent.
+    REGION_ROW, SPEED_ROW = 3, 4
 
     def __init__(self, parent, service):
         super().__init__(parent, service)
         settings = load_settings()
 
-        self.field(0, "Region")
+        self.field(0, "Speech engine")
+        self.engine = ctk.CTkSegmentedButton(
+            self.body, values=list(ENGINES), text_color=MUTED_TEXT,
+            command=lambda _: self.pick_engine(),
+        )
+        self.engine.set(ENGINE_LABELS.get(settings.get("engine", "kokoro"), "Kokoro"))
+        self.engine.grid(row=0, column=1, sticky="w")
+        # _buttons_dict is CTkSegmentedButton's {value: button}: it has no public way to
+        # reach one segment.
+        self.tooltips = [
+            Tooltip(button, self.COMPARISON[label])
+            for label, button in getattr(self.engine, "_buttons_dict", {}).items()
+        ]
+        self.about = self.hint(1, "")
+        self.download = self.hint(2, "")
+
+        self.field(self.REGION_ROW, "Region")
         self.region = ctk.CTkSegmentedButton(
             self.body, values=["US", "UK"], width=200, text_color=MUTED_TEXT,
         )
         self.region.set(settings.get("region", "US"))
-        self.region.grid(row=0, column=1, sticky="w")
+        self.region.grid(row=self.REGION_ROW, column=1, sticky="w")
 
-        self.speed = self.slider(1, "Speech speed", settings.get("speed", 1.0), 0.5, 2.0)
-        self.male_volume = self.slider(2, "Male volume", settings.get("malevolume", 0.7), 0.0, 2.0)
-        self.female_volume = self.slider(3, "Female volume", settings.get("femalevolume", 0.7), 0.0, 2.0)
+        self.speed = self.slider(self.SPEED_ROW, "Speech speed", settings.get("speed", 1.0), 0.5, 2.0)
+        self.male_volume = self.slider(5, "Male volume", settings.get("malevolume", 0.7), 0.0, 2.0)
+        self.female_volume = self.slider(6, "Female volume", settings.get("femalevolume", 0.7), 0.0, 2.0)
 
-        self.save_button(4, self.save)
+        buttons = ctk.CTkFrame(self.body, fg_color="transparent")
+        buttons.grid(row=7, column=0, columnspan=2, pady=(28, 0))
+        ctk.CTkButton(
+            buttons, text="Preview", command=self.preview, height=38, width=110,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        ).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(buttons, text="Save", command=self.save, height=38, width=130).pack(side="left")
+
+        self.show_engine()
+
+    def on_show(self):
+        # A download finished, or the Run screen started an engine, since last shown.
+        self.show_engine()
+
+    def picked(self):
+        return ENGINES[self.engine.get()]
+
+    def pick_engine(self):
+        """Picking an engine selects it at once: it's saved, the sidebar changes to suit
+        it, and a running TTS restarts with it. Saved only on Save, the screen showed one
+        engine while Start loaded another."""
+        engine = self.picked()
+        self.show_engine()
+        if engine == saved_engine():
+            return
+        update_settings(engine=engine)
+        self.master.apply_engine()
+        if self.service.running:
+            run = self.master.screens["Run"]
+            run.append(f"Switching to {ENGINE_LABELS[engine]}...")
+            run.restart()
+
+    def show_engine(self):
+        """Lay the screen out for the engine picked."""
+        engine = self.picked()
+        qwen = is_qwen(engine)
+        self.about.configure(text=self.ABOUT["qwen3" if qwen else "kokoro"])
+        self.show_row(self.REGION_ROW, not qwen)
+        self.show_row(self.SPEED_ROW, not qwen)
+
+        status = []
+        if qwen:
+            pending = qwen_engine.pending_download(qwen_engine.engine_models(tts.QWEN_ENGINES[engine]))
+            if pending:
+                status.append(f"Its first Start downloads {pending / 1000:.1f} GB.")
+            elif not qwen_engine.has_library():
+                status.append("Downloaded, but for the Qwen3-TTS library, which its first Start fetches.")
+            else:
+                status.append("Downloaded.")
+        if self.service.running and self.service.engine == engine:
+            status.append("Running now.")
+        self.download.configure(text=" ".join(status))
+        self.show_row(2, bool(status))
+
+    def preview(self):
+        # The sliders as they are, saved or not, with the region's default female voice.
+        if speech_ready(self.service):
+            self.service.say(
+                PREVIEW_LINE, tts.REGION_VOICES[self.region.get()][2],
+                volume=round(self.female_volume.get(), 2), speed=round(self.speed.get(), 2),
+            )
 
     def save(self):
+        # The engine was saved when it was picked.
+        region = self.region.get()
         update_settings(
-            region=self.region.get(),
+            region=region,
             speed=round(self.speed.get(), 2),
             malevolume=round(self.male_volume.get(), 2),
             femalevolume=round(self.female_volume.get(), 2),
         )
-        messagebox.showinfo("Saved", "General settings saved.")
+        if not self.service.running:
+            messagebox.showinfo("Saved", "General settings saved.")
+            return
+        # Speed and volume apply from the next line; Kokoro's region needs the model
+        # loaded again.
+        self.service.refresh_settings()
+        if region == self.service.region or is_qwen(self.service.engine):
+            messagebox.showinfo("Saved", "General settings saved.")
+        elif messagebox.askyesno("Saved", f"General settings saved.\n\nRestart the TTS now to use the {region} voices?"):
+            self.master.screens["Run"].restart()
 
 
 class VoiceTuningScreen(Screen):
@@ -509,6 +806,7 @@ class VoiceTuningScreen(Screen):
                 kept[voice] = changed
         self.overrides = kept
         update_settings(voice_settings=self.overrides)
+        self.service.refresh_settings()
         messagebox.showinfo("Saved", "Voice tuning saved.")
 
 
@@ -583,63 +881,103 @@ class AudioScreen(Screen):
         self.status.configure(text=f"Played a test tone through: {used}", text_color=("gray30", "gray70"))
 
     def save(self):
-        update_settings(audio_device=self.device.get().strip() or "auto")
-        messagebox.showinfo("Saved", "Audio device saved.")
+        device = self.device.get().strip() or "auto"
+        changed = device != load_settings().get("audio_device", "auto")
+        update_settings(audio_device=device)
+        # The TTS picks its device at Start.
+        if changed and self.service.running:
+            if messagebox.askyesno("Saved", "Audio device saved.\n\nRestart the TTS now to play through it?"):
+                self.master.screens["Run"].restart()
+        else:
+            messagebox.showinfo("Saved", "Audio device saved.")
 
 
 class NameScreen(Screen):
     title = "Name Pronunciation"
     subtitle = "Teach the TTS how to say your character's name."
 
+    INTRO = {
+        "kokoro": "Ask ChatGPT how to pronounce your name in the IPA alphabet,\n"
+                  'e.g. "Minhaka" becomes "miˈɲaka". Test it at ipa-reader.com.',
+        "qwen3": "Qwen3 reads plain text, so spell your name the way it sounds,\n"
+                 'e.g. "Minhaka" as "Mee-nyah-ka". Preview it until it sounds right.',
+    }
+    IPA_ROW, RESPELLING_ROW = 2, 3
+
     def __init__(self, parent, service):
         super().__init__(parent, service)
 
-        ctk.CTkLabel(
-            self.body,
-            text="Ask ChatGPT how to pronounce your name in the IPA alphabet,\n"
-                 'e.g. "Minhaka" becomes "miˈɲaka". Test it at ipa-reader.com.',
-            font=ctk.CTkFont(size=12), text_color=("gray45", "gray60"),
+        self.intro = ctk.CTkLabel(
+            self.body, text="", font=ctk.CTkFont(size=12), text_color=("gray45", "gray60"),
             anchor="w", justify="left",
-        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 16))
+        )
+        self.intro.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 16))
 
         self.field(1, "In-game name")
         self.name = ctk.CTkEntry(self.body, width=280, placeholder_text="Minhaka")
         self.name.grid(row=1, column=1, sticky="ew")
 
-        self.field(2, "IPA pronunciation")
+        # Each engine has its own field, and Save keeps both: switching engines back and
+        # forth doesn't lose the other one's.
+        self.field(self.IPA_ROW, "IPA pronunciation")
         self.pronunciation = ctk.CTkEntry(self.body, width=280, placeholder_text="miˈɲaka")
-        self.pronunciation.grid(row=2, column=1, sticky="ew")
+        self.pronunciation.grid(row=self.IPA_ROW, column=1, sticky="ew")
+
+        self.field(self.RESPELLING_ROW, "Spelled as it sounds")
+        self.respelling = ctk.CTkEntry(self.body, width=280, placeholder_text="Mee-nyah-ka")
+        self.respelling.grid(row=self.RESPELLING_ROW, column=1, sticky="ew")
+
+        for entry, value in zip((self.name, self.pronunciation, self.respelling), load_name_lexicon()):
+            if value:
+                entry.insert(0, value)
 
         buttons = ctk.CTkFrame(self.body, fg_color="transparent")
-        buttons.grid(row=3, column=0, columnspan=2, pady=(28, 0))
+        buttons.grid(row=4, column=0, columnspan=2, pady=(28, 0))
         ctk.CTkButton(
             buttons, text="Preview", command=self.preview, height=38, width=110,
             fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
         ).pack(side="left", padx=(0, 10))
         ctk.CTkButton(buttons, text="Save", command=self.save, height=38, width=130).pack(side="left")
+        self.on_show()
+
+    def on_show(self):
+        self.qwen = is_qwen(saved_engine())
+        self.intro.configure(text=self.INTRO["qwen3" if self.qwen else "kokoro"])
+        self.show_row(self.IPA_ROW, not self.qwen)
+        self.show_row(self.RESPELLING_ROW, self.qwen)
 
     def preview(self):
         name = self.name.get().strip()
         if not name:
             messagebox.showerror("Missing value", "Type your in-game name first.")
             return
-        pronunciation = self.pronunciation.get().strip()
-        # misaki reads "[word](/phonemes/)" as "say word with these phonemes", so this
-        # plays the pronunciation as typed, before it's saved and loaded by Start. With
-        # none typed, it plays how the name is said today.
-        spoken = f"[{name}](/{pronunciation}/)" if pronunciation else name
+        if self.qwen:
+            # Plain text: the respelling is what it reads.
+            spoken = self.respelling.get().strip() or name
+        else:
+            pronunciation = self.pronunciation.get().strip()
+            # misaki reads "[word](/phonemes/)" as "say word with these phonemes", so
+            # this plays the pronunciation as typed, before it's saved. With none typed,
+            # it plays how the name is said today.
+            spoken = f"[{name}](/{pronunciation}/)" if pronunciation else name
         if speech_ready(self.service):
             self.service.say(f"Well met, {spoken}.")
 
     def save(self):
         name = self.name.get().strip()
         pronunciation = self.pronunciation.get().strip()
-        if not name or not pronunciation:
-            messagebox.showerror("Missing value", "Both name and pronunciation are required.")
+        respelling = self.respelling.get().strip()
+        shown = respelling if self.qwen else pronunciation
+        if not name or not shown:
+            messagebox.showerror(
+                "Missing value",
+                f"Both name and {'spelling' if self.qwen else 'pronunciation'} are required.",
+            )
             return
         os.makedirs(os.path.dirname(NAME_LEXICON_PATH), exist_ok=True)
         with open(NAME_LEXICON_PATH, "w", encoding="utf-8") as f:
-            f.write(build_name_lexicon(name, pronunciation))
+            f.write(build_name_lexicon(name, pronunciation, respelling))
+        self.service.refresh_settings()
         messagebox.showinfo("Saved", "Name pronunciation saved.")
 
 
@@ -762,6 +1100,7 @@ class VoicesScreen(Screen):
         self.service.say(
             f"Well met, adventurer. I am {name}." if name else "Well met, adventurer.",
             voice_data.voice_from_description(row.voice.get()),
+            person=name,
         )
 
     def remove_row(self, row):
@@ -773,7 +1112,337 @@ class VoicesScreen(Screen):
     def save(self):
         self.commit_rows()
         save_records(self.records)
+        self.service.refresh_settings()
         messagebox.showinfo("Saved", "Voice assignments saved.")
+
+
+class QwenVoicesScreen(Screen):
+    """What the Voices button opens under Qwen3: each character's voice is designed
+    from a description, rather than picked from Kokoro's."""
+
+    title = "Voices"
+    subtitle = ("Pick a name to see the description its voice was made from. Change it, press\n"
+                "Design to hear a new voice, and Keep the one you like. Grayed names have no\n"
+                "voice of their own yet, so they use the default for their gender.")
+
+    # Characters that can't go in a file name, which is what a voice is saved as.
+    UNSAFE = set('/\\:*?"<>|')
+    DEFAULTS = "Defaults"
+    OTHER = "Other names"
+    # The editor's width, which its labels wrap to.
+    WRAP = 360
+
+    def __init__(self, parent, service):
+        super().__init__(parent, service)
+        self.designs = {}
+        self.reference_text = ""
+        # {lowercased name: name as its file is called} for every voice with a clip.
+        self.clips = {}
+        # {character: the gender of their Kokoro voice}, from voices.json, which decides
+        # the default they fall back on.
+        self.genders = {}
+        # {group: [names]}: the defaults, the characters of each expansion, then voices
+        # for names voices.json doesn't have.
+        self.groups = {}
+        # Names New voice added, until Keep saves a voice for them.
+        self.added = set()
+        self.selected = None
+        self.name_buttons = {}
+        # The VoiceDesign model, loaded at the first Design and released on leaving this
+        # screen: it holds 2 GB of the GPU, which the game wants back.
+        self.designer = None
+        self.busy = False
+        self.release_pending = False
+        # The voice Design made last, not kept yet: {"name", "instruct", "seed", "samples"}.
+        self.candidate = None
+        self.results = queue.Queue()
+
+        self.group = ctk.CTkOptionMenu(self.body, values=[], width=200, command=lambda _: self.show_group())
+        self.group.grid(row=0, column=0, sticky="w")
+        self.names = ctk.CTkScrollableFrame(self.body, width=176, fg_color=("gray92", "gray17"))
+        self.names.grid(row=1, column=0, sticky="ns", pady=(10, 0))
+        self.body.grid_rowconfigure(1, weight=1)
+        ctk.CTkButton(
+            self.body, text="+ New voice", command=self.new_voice, height=34, width=200,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        ).grid(row=2, column=0, sticky="w", pady=(10, 0))
+
+        editor = ctk.CTkFrame(self.body, fg_color="transparent")
+        editor.grid(row=0, column=1, rowspan=3, sticky="nsew", padx=(20, 0))
+        editor.grid_columnconfigure(0, weight=1)
+        self.heading = ctk.CTkLabel(editor, text="", font=ctk.CTkFont(size=17, weight="bold"), anchor="w")
+        self.heading.grid(row=0, column=0, sticky="w")
+        self.about = ctk.CTkLabel(
+            editor, text="", font=ctk.CTkFont(size=11), text_color=("gray45", "gray60"),
+            anchor="w", justify="left", wraplength=self.WRAP,
+        )
+        self.about.grid(row=1, column=0, sticky="w", pady=(2, 14))
+
+        ctk.CTkLabel(editor, text="Description", anchor="w").grid(row=2, column=0, sticky="w")
+        self.description = ctk.CTkTextbox(editor, height=120, wrap="word")
+        self.description.grid(row=3, column=0, sticky="ew", pady=(4, 4))
+        ctk.CTkLabel(
+            editor,
+            text="Who they are and how they sound: gender, age, pitch, accent, personality. "
+                 'e.g. "An old man with a deep, gravelly British voice. Slow, wise and kind."',
+            font=ctk.CTkFont(size=11), text_color=("gray45", "gray60"),
+            anchor="w", justify="left", wraplength=self.WRAP,
+        ).grid(row=4, column=0, sticky="w")
+
+        buttons = ctk.CTkFrame(editor, fg_color="transparent")
+        buttons.grid(row=5, column=0, sticky="w", pady=(20, 0))
+        self.design_button = ctk.CTkButton(buttons, text="Design", command=self.design, height=38, width=84)
+        self.design_button.pack(side="left", padx=(0, 6))
+        self.play_new_button = ctk.CTkButton(
+            buttons, text="Play new", command=self.play_new, height=38, width=84,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        )
+        self.play_new_button.pack(side="left", padx=(0, 6))
+        self.play_current_button = ctk.CTkButton(
+            buttons, text="Play current", command=self.play_current, height=38, width=96,
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        )
+        self.play_current_button.pack(side="left", padx=(0, 6))
+        self.keep_button = ctk.CTkButton(buttons, text="Keep", command=self.keep, height=38, width=84)
+        self.keep_button.pack(side="left")
+
+        self.status = ctk.CTkLabel(editor, text="", anchor="w", justify="left", wraplength=self.WRAP)
+        self.status.grid(row=6, column=0, sticky="w", pady=(16, 0))
+
+        self.reload()
+
+    def on_show(self):
+        # Only the lists: the description may hold edits that aren't designed yet.
+        self.reload()
+
+    def on_hide(self):
+        if self.busy:
+            self.release_pending = True
+        else:
+            self._release()
+
+    def _release(self):
+        self.release_pending = False
+        if self.designer is not None:
+            self.designer.close()
+            self.designer = None
+
+    def reload(self):
+        """Read the voices again: Keep, the Kokoro Voices screen or tools/design_voices.py
+        may have changed them."""
+        data = qwen_engine.load_designs()
+        self.designs, self.reference_text = data["voices"], data["reference_text"]
+        self.clips = {name.lower(): name for name in qwen_engine.clip_names()}
+        try:
+            characters = voice_data.load(VOICES_PATH)
+        except (OSError, ValueError):
+            characters = {}
+        self.genders = {
+            person.lower(): voice_data.classify_gender(voice)
+            for people in characters.values() for person, voice in people.items()
+        }
+
+        groups = {self.DEFAULTS: sorted(DEFAULT_GENDERS)}
+        for expansion in sorted(characters, key=lambda e: (
+            voice_data.EXPANSIONS.index(e) if e in voice_data.EXPANSIONS else len(voice_data.EXPANSIONS), e
+        )):
+            groups[expansion] = sorted(person.lower() for person in characters[expansion])
+        # The clips named after Kokoro voices are what characters fell back on before the
+        # defaults; nothing speaks with them now.
+        others = (set(self.designs) | set(self.clips) | self.added) - set(self.genders)
+        groups[self.OTHER] = sorted(others - set(DEFAULT_GENDERS) - set(voice_data.VOICE_GRADES))
+        self.groups = {group: names for group, names in groups.items() if names}
+
+        self.group.configure(values=list(self.groups))
+        if self.group.get() not in self.groups:
+            self.group.set(self.DEFAULTS)
+        self.show_group()
+        if self.selected is None:
+            self.select(self.groups[self.DEFAULTS][0])
+        else:
+            self._describe()
+
+    def show_group(self):
+        """List the names in the group picked. The voice being edited stays on screen."""
+        for button in self.name_buttons.values():
+            button.destroy()
+        self.name_buttons = {}
+        for name in self.groups.get(self.group.get(), []):
+            button = ctk.CTkButton(
+                self.names, text=self.display(name), anchor="w", height=28, corner_radius=6,
+                fg_color="transparent", hover_color=("gray80", "gray30"),
+                command=lambda n=name: self.select(n),
+            )
+            button.pack(fill="x", pady=1)
+            self.name_buttons[name] = button
+        self._mark()
+
+    def _mark(self):
+        """Highlight the voice being edited, and gray the names with no voice of their own."""
+        for name, button in self.name_buttons.items():
+            button.configure(
+                fg_color=("gray75", "gray25") if name == self.selected else "transparent",
+                text_color=MUTED_TEXT if name in self.clips else ("gray55", "gray50"),
+            )
+
+    def display(self, name):
+        if name in DEFAULT_GENDERS:
+            return name.capitalize()
+        # voices.json keeps names lowercase; capitalize them as they appear in game.
+        return " ".join(word[:1].upper() + word[1:] for word in name.split())
+
+    def select(self, name):
+        if name == self.selected:
+            return
+        if self.busy:
+            self._say("Wait for the voice being designed to finish first.")
+            return
+        self.selected = name
+        # Keep only ever saves what was designed for the voice on screen.
+        self.candidate = None
+        self.description.delete("1.0", "end")
+        self.description.insert("1.0", self.designs.get(name, {}).get("instruct", ""))
+        self.heading.configure(text=self.display(name))
+        self._describe()
+        self._say("")
+        self._mark()
+        self._update_buttons()
+
+    def _fallback(self, name):
+        """The default a name speaks with while it has no voice of its own: None for a
+        name voices.json doesn't have, whose gender the game reports line by line."""
+        gender = self.genders.get(name)
+        return qwen_engine.GENDER_VOICES[gender] if gender else None
+
+    def _describe(self):
+        name = self.selected
+        if name in DEFAULT_GENDERS:
+            text = f"Speaks for every {DEFAULT_GENDERS[name]} character without a voice of their own."
+        elif name in self.clips:
+            text = "Has a voice of their own."
+        elif self._fallback(name):
+            text = f"No voice of their own yet, so they speak with the {self._fallback(name)} voice."
+        else:
+            text = ("No voice of their own yet, so they speak with the default voice for the "
+                    "gender the game reports.")
+        self.about.configure(text=text)
+
+    def _update_buttons(self):
+        self.design_button.configure(state="disabled" if self.busy else "normal")
+        state = "normal" if self.candidate and not self.busy else "disabled"
+        self.play_new_button.configure(state=state)
+        self.keep_button.configure(state=state)
+
+    def _say(self, text, error=False):
+        self.status.configure(text=text, text_color="#e04f4f" if error else ("gray30", "gray70"))
+
+    def _play(self, samples):
+        try:
+            audio_output.play_samples(samples, qwen_engine.SAMPLE_RATE, load_settings().get("audio_device", "auto"))
+        except Exception as exc:
+            self._say(f"Could not play it: {exc}", error=True)
+
+    def new_voice(self):
+        if self.busy:
+            self._say("Wait for the voice being designed to finish first.")
+            return
+        dialog = ctk.CTkInputDialog(title="New voice", text="The character's name, as the game shows it:")
+        name = (dialog.get_input() or "").strip().lower()
+        if name:
+            self.add_voice(name)
+
+    def add_voice(self, name):
+        if self.UNSAFE & set(name):
+            messagebox.showerror("Name", 'A name can\'t contain any of / \\ : * ? " < > |')
+            return
+        if not any(name in names for names in self.groups.values()):
+            self.added.add(name)
+            self.reload()
+        self.group.set(next(group for group, names in self.groups.items() if name in names))
+        self.show_group()
+        self.select(name)
+        self._say("Describe their voice, then press Design.")
+
+    def design(self):
+        name = self.selected
+        instruct = self.description.get("1.0", "end").strip()
+        if not instruct:
+            messagebox.showerror("Missing value", "Describe the voice first.")
+            return
+        self.busy = True
+        self.candidate = None
+        self._update_buttons()
+        if self.designer is None:
+            self._say("Loading the voice designer. The first time, it downloads 2 GB: the Run "
+                      "screen shows how far it got.")
+        else:
+            self._say(f"Designing a voice for {self.display(name)}...")
+        # A new seed each time, so Design again gives another voice for the same words.
+        seed = random.randrange(1, 2 ** 31)
+        threading.Thread(target=self._design, args=(name, instruct, seed), daemon=True).start()
+        self.after(150, self._poll)
+
+    def _design(self, name, instruct, seed):
+        # Off the UI thread: loading takes seconds, and the first time a 2 GB download.
+        try:
+            if self.designer is None:
+                self.designer = qwen_engine.Designer()
+            started = time.monotonic()
+            samples = self.designer.design(instruct, self.reference_text, seed)
+            self.results.put({"name": name, "instruct": instruct, "seed": seed, "samples": samples,
+                              "took": time.monotonic() - started})
+        except Exception as exc:
+            self.results.put({"error": str(exc)})
+
+    def _poll(self):
+        """Tk isn't thread-safe, so the designing thread hands its result over here."""
+        try:
+            result = self.results.get_nowait()
+        except queue.Empty:
+            self.after(150, self._poll)
+            return
+        self.busy = False
+        if "error" in result:
+            self._say(f"Could not design the voice: {result['error']}", error=True)
+        else:
+            took = result.pop("took")
+            self.candidate = result
+            self._say(f"A new voice for {self.display(result['name'])}, made in {took:.1f} s. "
+                      "Keep it, or press Design again for another one.")
+            self._play(result["samples"])
+        if self.release_pending:
+            self._release()
+        self._update_buttons()
+
+    def play_new(self):
+        if self.candidate:
+            self._play(self.candidate["samples"])
+
+    def play_current(self):
+        """The voice the selected name speaks with now: their own, else their default."""
+        for name in (self.selected, self._fallback(self.selected)):
+            if name in self.clips:
+                self._play(qwen_engine.read_wav(
+                    os.path.join(qwen_engine.voices_dir(), f"{self.clips[name]}.wav")))
+                return
+        self._say(f"{self.display(self.selected)} has no voice yet. Describe one and press Design.")
+
+    def keep(self):
+        candidate = self.candidate
+        if not candidate:
+            return
+        name = candidate["name"]
+        qwen_engine.write_clip(name, candidate["samples"], self.reference_text)
+        qwen_engine.save_design(name, candidate["instruct"], candidate["seed"])
+        self.service.reload_voice(name)
+        self.candidate = None
+        self.added.discard(name)
+        self.reload()
+        self._update_buttons()
+        if self.service.qwen is not None:
+            self._say(f"Kept. {self.display(name)} speaks with it from the next line.")
+        else:
+            self._say(f"Kept. {self.display(name)} speaks with it once the TTS starts.")
 
 
 class SettingsApp(ctk.CTk):
@@ -785,6 +1454,11 @@ class SettingsApp(ctk.CTk):
         ("Voices", VoicesScreen),
         ("Audio", AudioScreen),
     )
+    # Under Qwen3 a character's voice is designed rather than picked from Kokoro's, so
+    # these buttons open another screen.
+    QWEN_SCREENS = {"Voices": QwenVoicesScreen}
+    # Hidden from the sidebar under Qwen3: Tuning's overrides are per Kokoro voice.
+    KOKORO_ONLY = ("Tuning",)
 
     def __init__(self):
         super().__init__()
@@ -807,6 +1481,7 @@ class SettingsApp(ctk.CTk):
 
         self.screens = {}
         self.nav_buttons = {}
+        self.current_screen = None
         for i, (name, screen_class) in enumerate(self.SCREENS, start=1):
             button = ctk.CTkButton(
                 sidebar, text=name, anchor="w", height=38, corner_radius=8,
@@ -818,6 +1493,11 @@ class SettingsApp(ctk.CTk):
             screen = screen_class(self, self.service)
             screen.grid(row=0, column=1, sticky="nsew")
             self.screens[name] = screen
+        self.qwen_screens = {}
+        for name, screen_class in self.QWEN_SCREENS.items():
+            screen = screen_class(self, self.service)
+            screen.grid(row=0, column=1, sticky="nsew")
+            self.qwen_screens[name] = screen
 
         ctk.CTkLabel(sidebar, text="Appearance", font=ctk.CTkFont(size=11), anchor="w").grid(
             row=len(self.SCREENS) + 2, column=0, padx=20, sticky="w"
@@ -837,11 +1517,27 @@ class SettingsApp(ctk.CTk):
         sys.stderr = LogStream(run_screen.append, sys.stderr)
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.apply_engine()
         self.show(self.SCREENS[0][0])
+
+    def apply_engine(self):
+        """Show the screens for the engine General has saved."""
+        qwen = is_qwen(saved_engine())
+        for name in self.KOKORO_ONLY:
+            # Rows keep their place in the sidebar's grid, so it comes back where it was.
+            if qwen:
+                self.nav_buttons[name].grid_remove()
+            else:
+                self.nav_buttons[name].grid()
+
+    def screen_for(self, name):
+        if name in self.qwen_screens and is_qwen(saved_engine()):
+            return self.qwen_screens[name]
+        return self.screens[name]
 
     def on_service_state(self, running):
         # Called from the service thread; hop back to the UI thread to touch widgets.
-        self.after(0, lambda: self.screens["Run"].set_running(running))
+        self.after(0, self.screens["Run"].show_state)
 
     def on_close(self):
         self.service.stop()
@@ -852,10 +1548,14 @@ class SettingsApp(ctk.CTk):
         update_settings(appearance=mode)
 
     def show(self, name):
+        screen = self.screen_for(name)
+        if self.current_screen not in (None, screen):
+            self.current_screen.on_hide()
+        self.current_screen = screen
         # Screens are built once and kept, so let the one coming up pick up anything
         # another screen saved in the meantime.
-        self.screens[name].on_show()
-        self.screens[name].tkraise()
+        screen.on_show()
+        screen.tkraise()
         for screen_name, button in self.nav_buttons.items():
             button.configure(
                 fg_color=("gray75", "gray25") if screen_name == name else "transparent"

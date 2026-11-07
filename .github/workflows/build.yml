@@ -104,6 +104,9 @@ jobs:
           # Name screen's lexicon is the user's too, so it stays out of the zip as well.
           cp -r lexicons dist/lexicons
           rm dist/lexicons/Your-Name/lexicon.pls
+          # The Qwen3-TTS voices ship the same way. The engine downloads its library and
+          # models itself, so those stay out of the zip.
+          if [ -d qwen3-voices ]; then cp -r qwen3-voices dist/qwen3-voices; fi
 
       - uses: actions/upload-artifact@v4
         with:

@@ -1,0 +1,545 @@
+{
+  "reference_text": "The road ahead is long, and none of us can say what waits at its end. But whatever comes, we shall face it together, as we always have.",
+  "voices": {
+    "af_heart": {
+      "seed": 1,
+      "instruct": "A young adult woman with a warm, gentle, clear American voice. Kind and sincere, medium pitch, natural and calm delivery."
+    },
+    "af_bella": {
+      "seed": 1,
+      "instruct": "A young adult woman with a bright, confident American voice. Expressive and lively, medium-high pitch, clear articulation."
+    },
+    "af_nicole": {
+      "seed": 1,
+      "instruct": "A young woman with a soft, airy, breathy voice. Quiet and intimate, medium-high pitch, gentle and slow delivery."
+    },
+    "af_kore": {
+      "seed": 1,
+      "instruct": "A woman in her thirties with a clear, steady American voice. Mature and self-assured, medium-low pitch, measured delivery."
+    },
+    "af_sarah": {
+      "seed": 1,
+      "instruct": "A young woman with a friendly, cheerful American voice. Upbeat and quick, medium-high pitch."
+    },
+    "af_aoede": {
+      "seed": 1,
+      "instruct": "An adult woman with a smooth, calm, mellow voice. Graceful and composed, medium pitch, unhurried."
+    },
+    "af_sky": {
+      "seed": 1,
+      "instruct": "A teenage girl with a light, youthful, airy voice. Curious and sweet, high pitch."
+    },
+    "af_nova": {
+      "seed": 1,
+      "instruct": "A young adult woman with a crisp, precise, modern voice. Cool and businesslike, medium pitch."
+    },
+    "am_puck": {
+      "seed": 1,
+      "instruct": "A young adult man with an energetic, expressive American voice. Confident and lively, medium pitch, clear diction."
+    },
+    "am_michael": {
+      "seed": 1,
+      "instruct": "A man in his forties with a warm, steady American voice. Reassuring and grounded, medium-low pitch."
+    },
+    "am_fenrir": {
+      "seed": 1,
+      "instruct": "An adult man with a deep, strong, resonant voice. Commanding and serious, low pitch, firm delivery."
+    },
+    "am_eric": {
+      "seed": 1,
+      "instruct": "An adult man with a plain, earnest, friendly American voice. Honest and straightforward, medium pitch."
+    },
+    "am_echo": {
+      "seed": 1,
+      "instruct": "A large adult man with a resonant, booming, warm voice. Calm and slow, low pitch."
+    },
+    "bm_george": {
+      "seed": 1,
+      "instruct": "A man in his sixties with a deep, dignified British voice. Wise and authoritative, low pitch, slow and deliberate."
+    },
+    "bm_fable": {
+      "seed": 1,
+      "instruct": "A young man with a refined, articulate British voice. Thoughtful and polite, medium pitch, clear and precise."
+    },
+    "bm_daniel": {
+      "seed": 1,
+      "instruct": "An adult man with a calm, measured British voice. Cultured and even-tempered, medium-low pitch."
+    },
+    "bm_lewis": {
+      "seed": 1,
+      "instruct": "A mature man with a deep, slow, slightly gravelly British voice. Solemn and grave, low pitch."
+    },
+    "bf_emma": {
+      "seed": 1,
+      "instruct": "A young woman with a poised, clear British voice. Confident and quick-witted, medium-high pitch."
+    },
+    "bf_isabella": {
+      "seed": 1,
+      "instruct": "A young adult woman with a warm, elegant British voice. Gentle and refined, medium pitch."
+    },
+    "bf_lily": {
+      "seed": 1,
+      "instruct": "A young woman with a soft, sweet, youthful British voice. Gentle and shy, high pitch."
+    },
+    "bf_alice": {
+      "seed": 1,
+      "instruct": "An adult woman with a crisp, composed British voice. Cool and intelligent, medium-low pitch."
+    },
+    "zm_yunjian": {
+      "seed": 1,
+      "instruct": "An older man with a deep, booming, hearty voice. Warm-hearted and loyal, slightly rough, low pitch."
+    },
+    "alisaie": {
+      "seed": 1,
+      "instruct": "A young woman of about sixteen with a crisp, upper-class British accent. Sharp, fiery and self-assured, speaks quickly and bluntly, medium-high pitch."
+    },
+    "alphinaud": {
+      "seed": 619723239,
+      "instruct": "Young male, late teens, light clear tenor, posh British RP accent, articulate and scholarly, earnest and gentle, composed, measured pace, crisp polished diction."
+    },
+    "cid": {
+      "seed": 1,
+      "instruct": "A man in his thirties with a warm, confident, slightly gravelly voice. A brilliant engineer, practical and good-humoured, quick-witted and energetic."
+    },
+    "g'raha tia": {
+      "seed": 1,
+      "instruct": "A young man with a bright, warm British voice. Eager, earnest and kind, a little boyish and quick to enthusiasm, medium-high pitch."
+    },
+    "gaius van baelsar": {
+      "seed": 1,
+      "instruct": "A tall, imposing man in his fifties with a deep, resonant British voice. Commanding, stern and measured, every word carrying iron authority."
+    },
+    "hydaelyn": {
+      "seed": 1,
+      "instruct": "A woman with a serene, ethereal, gentle voice, soft and motherly. Calm, warm and otherworldly, speaks slowly as if from far away."
+    },
+    "igeyorhm": {
+      "seed": 1,
+      "instruct": "A woman with a cold, haughty, theatrical voice. Imperious and scornful, with a sharp, mocking edge."
+    },
+    "kan-e-senna": {
+      "seed": 1,
+      "instruct": "A woman with a soft, serene, gentle voice. Calm, wise and compassionate, speaks slowly and kindly, medium-high pitch."
+    },
+    "krile": {
+      "seed": 1,
+      "instruct": "A small young woman with a soft, high, sweet British voice. Gentle, curious and cheerful, kind and thoughtful."
+    },
+    "lahabrea": {
+      "seed": 1,
+      "instruct": "A man with a deep, grandiose, theatrical British voice. Arrogant and sinister, savouring every word with lofty disdain."
+    },
+    "livia sas junius": {
+      "seed": 1,
+      "instruct": "A woman with a sharp, intense, zealous voice. Cold and devoted, her calm cracking into fanatical fervour."
+    },
+    "lolorito": {
+      "seed": 1,
+      "instruct": "A small older man with a smooth, oily, self-satisfied voice. A shrewd merchant, condescending and calculating, slow and measured."
+    },
+    "louisoix": {
+      "seed": 1,
+      "instruct": "An elderly man with a gentle, warm, wise British voice. Kind and grandfatherly, calm and dignified, speaks with quiet conviction."
+    },
+    "merlwyb": {
+      "seed": 1,
+      "instruct": "A woman in her forties with a firm, commanding, slightly husky voice. A seasoned admiral, stern, decisive and no-nonsense."
+    },
+    "minfilia": {
+      "seed": 1,
+      "instruct": "A young woman with a gentle, warm, earnest voice. Kind and caring, soft-spoken but resolute, medium pitch."
+    },
+    "moenbryda": {
+      "seed": 1,
+      "instruct": "A tall young woman with a loud, hearty, boisterous voice. Cheerful, bold and blunt, full of energy and laughter."
+    },
+    "nabriales": {
+      "seed": 1,
+      "instruct": "A man with a smooth, arrogant, mocking voice. Sinister and self-assured, drawling with contempt."
+    },
+    "nanamo ul namo": {
+      "seed": 1,
+      "instruct": "A small young woman with a high, bright, girlish voice. Playful and mischievous, yet regal and sincere when it matters."
+    },
+    "nero tol scaeva": {
+      "seed": 1,
+      "instruct": "A man in his thirties with a smug, sardonic British voice. Arrogant, cocky and sharp-tongued, with a sneering drawl."
+    },
+    "papalymo": {
+      "seed": 1,
+      "instruct": "A small man with a dry, stern, clipped voice. Serious, scholarly and curt, easily exasperated but caring underneath."
+    },
+    "raubahn": {
+      "seed": 1,
+      "instruct": "A big, burly man in his fifties with a deep, booming, gruff voice. Forthright, honourable and passionate, a seasoned warrior."
+    },
+    "rhitahtyn sas arvina": {
+      "seed": 1,
+      "instruct": "A man in his fifties with a deep, stern, military voice. Proud, disciplined and honourable, speaks with gravity."
+    },
+    "tataru": {
+      "seed": 1,
+      "instruct": "A small young woman with a high, bubbly, cheerful voice. Fast, excitable and enthusiastic, a little squeaky."
+    },
+    "thancred": {
+      "seed": 1,
+      "instruct": "A man in his thirties with a smooth, low British voice. Charming, wry and a touch roguish, with a serious, weary edge, medium-low pitch."
+    },
+    "urianger": {
+      "seed": 1,
+      "instruct": "A tall man with a very deep, soft, slow British voice. Solemn, gentle and poetic, speaks in measured, hushed tones."
+    },
+    "y'shtola": {
+      "seed": 1,
+      "instruct": "A woman with a low, smooth, cool British voice. Calm, dry-witted and composed, speaks with quiet, measured authority."
+    },
+    "yda": {
+      "seed": 1,
+      "instruct": "A young woman with a loud, energetic, boyish voice. Cheerful, brash and impulsive, speaks with bouncy enthusiasm."
+    },
+    "artoirel": {
+      "seed": 1,
+      "instruct": "A young nobleman with a proud, earnest, formal British voice. Stiff and dutiful, warming with time, medium pitch."
+    },
+    "aymeric": {
+      "seed": 1,
+      "instruct": "A man in his thirties with a soft, warm, refined voice and a gentle Irish lilt. Noble, kind and composed, speaks with grace."
+    },
+    "edmont": {
+      "seed": 1,
+      "instruct": "An elderly nobleman with a gentle, dignified British voice. Kind, fatherly and wise, slow and warm."
+    },
+    "emmanellain": {
+      "seed": 1,
+      "instruct": "A young nobleman with a whiny, foppish, theatrical British voice. Cowardly, vain and dramatic, comically self-pitying."
+    },
+    "estinien": {
+      "seed": 1,
+      "instruct": "A man in his thirties with a low, rough, gravelly British voice. Terse, gruff and world-weary, with dry, biting humour."
+    },
+    "haurchefant": {
+      "seed": 1,
+      "instruct": "A man in his thirties with a warm, hearty, cheerful British voice. Chivalrous, kind and enthusiastic, always smiling."
+    },
+    "hilda": {
+      "seed": 1,
+      "instruct": "A woman in her thirties with a tough, gruff, streetwise voice. Blunt, fierce and defiant, a rough-edged rebel leader."
+    },
+    "hraesvelgr": {
+      "seed": 1,
+      "instruct": "An ancient dragon with an immensely deep, slow, booming voice. Grave, solemn and weary, every word heavy with age."
+    },
+    "ilberd": {
+      "seed": 1,
+      "instruct": "A man in his forties with a rough, charismatic, passionate voice. A rousing rebel captain, with bitterness beneath."
+    },
+    "lucia": {
+      "seed": 1,
+      "instruct": "A woman in her thirties with a cool, firm, disciplined voice. Stern, loyal and professional, speaks crisply."
+    },
+    "midgardsormr": {
+      "seed": 1,
+      "instruct": "An ancient dragon with a deep, resonant, regal voice. Wise, stern and a little sardonic, slow and commanding."
+    },
+    "nidhogg": {
+      "seed": 1,
+      "instruct": "A dragon with a monstrous, snarling, rasping deep voice. Furious, vengeful and full of hatred."
+    },
+    "thordan": {
+      "seed": 1,
+      "instruct": "An elderly archbishop with a deep, solemn, authoritative British voice. Dignified and pious, grandiose and cold."
+    },
+    "vidofnir": {
+      "seed": 1,
+      "instruct": "A female dragon with a calm, gentle, ethereal voice. Kind and sorrowful, slow and soft."
+    },
+    "ysayle": {
+      "seed": 1,
+      "instruct": "A woman with a soft, calm, earnest voice. Gentle, idealistic and melancholy, speaks quietly and sincerely."
+    },
+    "arenvald": {
+      "seed": 1,
+      "instruct": "A young man with a cheerful, earnest, eager voice. Energetic, brave and good-hearted, medium pitch."
+    },
+    "asahi": {
+      "seed": 1,
+      "instruct": "A young man with a smooth, fawning, sneering voice. Slimy and two-faced, oozing false politeness."
+    },
+    "cirina": {
+      "seed": 1,
+      "instruct": "A young woman with a soft, gentle, earnest voice. Kind, shy and sincere, medium-high pitch."
+    },
+    "conrad": {
+      "seed": 1,
+      "instruct": "A man in his fifties with a gruff, stern, battle-hardened voice. A grim, steady rebel leader."
+    },
+    "fordola": {
+      "seed": 1,
+      "instruct": "A young woman with a harsh, bitter, aggressive voice. Sneering and angry, spitting each word with contempt."
+    },
+    "gosetsu": {
+      "seed": 1,
+      "instruct": "An older man with a deep, booming, hearty voice. A loyal old samurai, warm-hearted and old-fashioned, slow and proud."
+    },
+    "hien": {
+      "seed": 1,
+      "instruct": "A young man with a confident, warm, charismatic voice. A noble prince, cheerful, bold and sincere."
+    },
+    "lyse": {
+      "seed": 1,
+      "instruct": "A young woman with an energetic, upbeat, earnest voice. Cheerful, determined and spirited, medium pitch."
+    },
+    "m'naago": {
+      "seed": 1,
+      "instruct": "A young woman with a firm, earnest, determined voice. Tough and straightforward, a passionate resistance fighter."
+    },
+    "magnai": {
+      "seed": 1,
+      "instruct": "A tall young man with a loud, booming, arrogant voice. Brash, haughty and theatrical, utterly sure of himself."
+    },
+    "maxima": {
+      "seed": 1,
+      "instruct": "A man in his thirties with a polite, calm, cultured British voice. A diplomat, measured, sincere and composed."
+    },
+    "pipin": {
+      "seed": 1,
+      "instruct": "A small young man with a serious, disciplined, earnest voice. Formal and dutiful, speaks crisply."
+    },
+    "sadu": {
+      "seed": 1,
+      "instruct": "A woman with a fierce, rough, proud voice. Harsh, aggressive and scornful, a warrior queen."
+    },
+    "varis zos galvus": {
+      "seed": 1,
+      "instruct": "A man in his fifties with a deep, cold, imposing British voice. An emperor, commanding, gravelly and contemptuous."
+    },
+    "yotsuyu": {
+      "seed": 1,
+      "instruct": "A woman with a cold, sultry, contemptuous voice. Cruel and languid, drawling with bitter disdain."
+    },
+    "yugiri": {
+      "seed": 1,
+      "instruct": "A woman with a calm, quiet, composed voice. A disciplined shinobi, serious, measured and polite."
+    },
+    "zenos": {
+      "seed": 1,
+      "instruct": "A man in his thirties with a deep, cold, calm aristocratic British voice. Languid, quiet and menacing, unsettlingly serene."
+    },
+    "anogg": {
+      "seed": 1,
+      "instruct": "A woman with a warm, gentle, friendly voice. Kind and calm, medium pitch."
+    },
+    "ardbert": {
+      "seed": 1,
+      "instruct": "A man in his thirties with a warm, weathered, friendly voice. Easy-going and kind, tinged with sorrow, slightly rough."
+    },
+    "beq lugg": {
+      "seed": 1,
+      "instruct": "An elderly creature with a soft, slow, dreamy voice. Gentle, eccentric and wise, drifting and curious."
+    },
+    "chai-nuzz": {
+      "seed": 1,
+      "instruct": "A middle-aged man with a warm, friendly, practical voice. Proud and good-natured, speaks plainly."
+    },
+    "crystal exarch": {
+      "seed": 1,
+      "instruct": "A man with a calm, gentle, measured British voice. Soft-spoken, wise and tender, quietly carrying a heavy burden."
+    },
+    "cylva": {
+      "seed": 1,
+      "instruct": "A woman with a warm, clear, sincere voice. Kind and steady, medium pitch."
+    },
+    "dulia-chai": {
+      "seed": 1,
+      "instruct": "A woman with a polite, efficient, warm voice. Professional, kind and attentive."
+    },
+    "elidibus": {
+      "seed": 1,
+      "instruct": "A young man with a calm, cold, solemn voice. Detached and eerie, speaks with measured, hollow gravity."
+    },
+    "emet-selch": {
+      "seed": 1,
+      "instruct": "A man with a rich, languid, theatrical British baritone. Sardonic, weary and mocking, with a slow, dramatic drawl."
+    },
+    "feo ul": {
+      "seed": 1,
+      "instruct": "A tiny fairy with a high, sing-song, playful voice. Whimsical, affectionate and mischievous, light and airy."
+    },
+    "gaia": {
+      "seed": 1,
+      "instruct": "A young woman with a cool, sulky, sharp-tongued voice. Guarded, prickly and gloomy, rarely softening."
+    },
+    "hythlodaeus": {
+      "seed": 1,
+      "instruct": "A man with a light, cheerful, airy British voice. Playful, teasing and laid-back, warm and amused."
+    },
+    "konogg": {
+      "seed": 1,
+      "instruct": "A man with a steady, warm, mid-range voice. Calm and good-natured, speaks plainly."
+    },
+    "lyna": {
+      "seed": 1,
+      "instruct": "A young woman with a firm, steady, disciplined voice. An earnest guard captain, serious and loyal."
+    },
+    "ran'jit": {
+      "seed": 1,
+      "instruct": "An old man with a deep, grim, gravelly voice. Stern, cold and menacing, a fearsome old warrior."
+    },
+    "runar": {
+      "seed": 1,
+      "instruct": "A man with a deep, strong, steady voice. Serious and dependable, low pitch."
+    },
+    "ryne": {
+      "seed": 1,
+      "instruct": "A girl of about sixteen with a soft, gentle, shy voice. Kind and earnest, a little timid, growing braver."
+    },
+    "titania": {
+      "seed": 1,
+      "instruct": "A fae king with an ethereal, regal, echoing voice. Whimsical, majestic and otherworldly."
+    },
+    "vauthry": {
+      "seed": 1,
+      "instruct": "A young man with a petulant, whiny, booming voice. Spoiled, arrogant and cruel, prone to tantrums."
+    },
+    "ameliance": {
+      "seed": 1,
+      "instruct": "A woman in her forties with a warm, refined, gentle British voice. Kind, graceful and motherly."
+    },
+    "amon": {
+      "seed": 1,
+      "instruct": "An older man with a cold, sneering, theatrical voice. A mad scientist, scheming and gleeful."
+    },
+    "ericthonios": {
+      "seed": 1,
+      "instruct": "A young man with an earnest, eager, slightly nervous voice. Kind, curious and well-meaning."
+    },
+    "fandaniel": {
+      "seed": 1,
+      "instruct": "A man with a manic, giddy, theatrical British voice. Unhinged, playful and gleefully nihilistic, prone to giggling."
+    },
+    "fourchenault": {
+      "seed": 1,
+      "instruct": "A man in his fifties with a stern, formal, cold aristocratic British voice. Proud and severe, softening only rarely."
+    },
+    "golbez": {
+      "seed": 1,
+      "instruct": "A man with a deep, cold, resonant, ominous voice. Measured and grim, speaks slowly, as if from behind armour."
+    },
+    "hermes": {
+      "seed": 1,
+      "instruct": "A man with a soft, gentle, melancholy British voice. Thoughtful, troubled and kind, speaks quietly."
+    },
+    "jullus": {
+      "seed": 1,
+      "instruct": "A young man with a proud, bitter, earnest voice. A soldier, defensive and angry at first, honourable underneath."
+    },
+    "meteion": {
+      "seed": 1,
+      "instruct": "A girl with a high, sweet, airy, childlike voice. Innocent and curious, eerily calm."
+    },
+    "moren": {
+      "seed": 1,
+      "instruct": "A man with a calm, measured, cultured voice. Even-tempered and thoughtful, medium-low pitch."
+    },
+    "nidhana": {
+      "seed": 1,
+      "instruct": "A woman with a warm, gentle, clear voice. Kind and sincere, medium pitch."
+    },
+    "quintus": {
+      "seed": 1,
+      "instruct": "A man in his fifties with a gruff, stern, authoritative voice. A grim, battle-weary general."
+    },
+    "varshahn": {
+      "seed": 1,
+      "instruct": "A man with a deep, strong, serious voice. Steady and commanding, low pitch."
+    },
+    "venat": {
+      "seed": 1,
+      "instruct": "A mature woman with a warm, wise, serene British voice. Gentle yet strong, calm and kind."
+    },
+    "vrtra": {
+      "seed": 1,
+      "instruct": "A young-looking man with a gentle, warm, measured voice. Regal, wise and kind, speaks calmly."
+    },
+    "zero": {
+      "seed": 1,
+      "instruct": "A young woman with a flat, quiet, deadpan voice. Blunt and detached, slowly showing warmth."
+    },
+    "alayla": {
+      "seed": 1,
+      "instruct": "A young woman with a soft, gentle, airy voice. Kind and quiet, medium-high pitch."
+    },
+    "bakool ja ja": {
+      "seed": 1,
+      "instruct": "A young man with a rough, bitter, arrogant voice. Ambitious and resentful, sneering, with a gravelly edge."
+    },
+    "cahciua": {
+      "seed": 1,
+      "instruct": "A young woman with a bright, lively, confident voice. Spirited and expressive, medium-high pitch."
+    },
+    "calyx": {
+      "seed": 1,
+      "instruct": "A man with a cold, flat, emotionless voice. Logical and precise, calm and mechanical."
+    },
+    "erenville": {
+      "seed": 1,
+      "instruct": "A young man with a low, dry, terse voice. Reserved and blunt, quietly caring, deadpan."
+    },
+    "gulool ja": {
+      "seed": 1,
+      "instruct": "A young boy with a bright, curious, earnest voice. Cheerful and innocent."
+    },
+    "gulool ja ja": {
+      "seed": 1,
+      "instruct": "An elderly king with a deep, warm, booming voice. Jovial, wise and larger than life, laughs heartily."
+    },
+    "halmarut": {
+      "seed": 1,
+      "instruct": "A woman with a smooth, calm, mellow voice. Graceful and composed, medium pitch."
+    },
+    "koana": {
+      "seed": 1,
+      "instruct": "A young man with a calm, polite, thoughtful voice. Intellectual and measured, soft-spoken and earnest."
+    },
+    "miayli": {
+      "seed": 1,
+      "instruct": "A young woman with a warm, gentle, clear voice. Kind and sincere, medium pitch."
+    },
+    "otis": {
+      "seed": 1,
+      "instruct": "An older man with a deep, steady, loyal voice. A stoic knight, grave and dutiful."
+    },
+    "shale": {
+      "seed": 1,
+      "instruct": "A young woman with a crisp, precise, cool voice. Composed and businesslike, medium pitch."
+    },
+    "sphene": {
+      "seed": 1,
+      "instruct": "A young woman with a gentle, warm, sincere voice. A kind queen, earnest and regal."
+    },
+    "teeshal ja": {
+      "seed": 1,
+      "instruct": "A girl with a light, youthful, airy voice. Curious and sweet, high pitch."
+    },
+    "wuk lamat": {
+      "seed": 1,
+      "instruct": "A young woman with a loud, warm, energetic, slightly raspy voice. Enthusiastic, earnest and determined, full of heart."
+    },
+    "zelenia": {
+      "seed": 1,
+      "instruct": "A young woman with a bright, confident, expressive voice. Lively and assured, medium-high pitch."
+    },
+    "zoraal ja": {
+      "seed": 1,
+      "instruct": "A man with a deep, cold, proud, intense voice. Ambitious and menacing, speaks with ruthless calm."
+    },
+    "default female": {
+      "seed": 1,
+      "instruct": "A young adult woman with a warm, gentle, clear American voice. Kind and sincere, medium pitch, natural and calm delivery."
+    },
+    "default male": {
+      "instruct": "A young adult man with an energetic, expressive American voice. Confident and lively, medium pitch, clear diction.",
+      "seed": 1
+    }
+  }
+}

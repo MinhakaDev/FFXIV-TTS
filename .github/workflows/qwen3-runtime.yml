@@ -1,0 +1,123 @@
+name: Build Qwen3-TTS runtime
+
+# Builds the Qwen3-TTS library (qwentts.cpp, with Vulkan so AMD, NVIDIA and Intel GPUs
+# all work) for Linux and Windows, and publishes it on a pre-release that the app
+# downloads from when someone first starts the Qwen3 engine. Pushing the tag named for
+# QWENTTS_COMMIT in src/qwen_engine.py runs it, from any branch:
+#
+#   git tag qwen3-runtime-de2ad83 && git push origin qwen3-runtime-de2ad83
+#
+# Do that again after changing QWENTTS_COMMIT; older app versions keep their own tag.
+# It has to be a pre-release: the update check reads /releases/latest, which skips them,
+# and would otherwise take this tag for the newest version.
+on:
+  push:
+    tags:
+      - 'qwen3-runtime-*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Older than ubuntu-latest, so the library also loads on distros with an older glibc.
+          - os: ubuntu-24.04
+            asset: libqwen-linux-x64.so
+          - os: windows-latest
+            asset: qwen-windows-x64.dll
+    runs-on: ${{ matrix.os }}
+    env:
+      VULKAN_VERSION: 1.4.363.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned qwentts.cpp commit
+        id: pin
+        shell: bash
+        run: |
+          commit=$(sed -n 's/^QWENTTS_COMMIT = "\([0-9a-f]*\)"$/\1/p' src/qwen_engine.py)
+          if [ "${GITHUB_REF_NAME}" != "qwen3-runtime-${commit:0:7}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} doesn't match QWENTTS_COMMIT ($commit): tag qwen3-runtime-${commit:0:7}" >&2
+            exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ServeurpersoCom/qwentts.cpp
+          ref: ${{ steps.pin.outputs.commit }}
+          path: qwentts.cpp
+          submodules: recursive
+
+      # The LunarG SDK has the glslc shader compiler and SPIR-V headers ggml's Vulkan
+      # backend needs; Ubuntu's packages lag behind it.
+      - name: Install the Vulkan SDK (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -sSfL -o vulkan-sdk.tar.xz \
+            "https://sdk.lunarg.com/sdk/download/$VULKAN_VERSION/linux/vulkansdk-linux-x86_64-$VULKAN_VERSION.tar.xz"
+          mkdir vulkan-sdk && tar -xf vulkan-sdk.tar.xz -C vulkan-sdk
+          echo "VULKAN_SDK=$PWD/vulkan-sdk/$VULKAN_VERSION/x86_64" >> "$GITHUB_ENV"
+          echo "$PWD/vulkan-sdk/$VULKAN_VERSION/x86_64/bin" >> "$GITHUB_PATH"
+
+      - name: Install the Vulkan SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = "$env:RUNNER_TEMP\vulkan-sdk.exe"
+          curl.exe -sSfL -o $installer "https://sdk.lunarg.com/sdk/download/$env:VULKAN_VERSION/windows/vulkansdk-windows-X64-$env:VULKAN_VERSION.exe"
+          Start-Process -Wait -FilePath $installer -ArgumentList '--accept-licenses', '--default-answer', '--confirm-command', 'install'
+          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$env:VULKAN_VERSION"
+          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$env:VULKAN_VERSION\Bin"
+
+      - name: Build
+        shell: bash
+        run: |
+          # ggml linked statically, so the library is one file. GGML_NATIVE off: its
+          # default tunes the CPU code for this runner's CPU, which crashes on others.
+          # AVX2 still covers every x86 CPU since 2013-2015.
+          flags=(
+            -DCMAKE_BUILD_TYPE=Release -DQWEN_SHARED=ON -DBUILD_SHARED_LIBS=OFF
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DGGML_VULKAN=ON
+            -DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
+          )
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # The C++ runtime inside, so it doesn't depend on the user's libstdc++.
+            flags+=("-DCMAKE_SHARED_LINKER_FLAGS=-static-libstdc++ -static-libgcc")
+          else
+            # The static C runtime, so it doesn't need the Visual C++ redistributable.
+            flags+=(-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded)
+          fi
+          cmake -S qwentts.cpp -B qwentts.cpp/build "${flags[@]}"
+          cmake --build qwentts.cpp/build --config Release --target qwen -j 4
+          built=$(find qwentts.cpp/build \( -name libqwen.so -o -name qwen.dll \) | head -n1)
+          cp "$built" "${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Qwen3-TTS runtime ${{ github.ref_name }}
+          body: The Qwen3-TTS library the app downloads itself. Nothing here to download by hand.
+          prerelease: true
+          make_latest: false
+          files: |
+            artifacts/libqwen-linux-x64.so
+            artifacts/qwen-windows-x64.dll

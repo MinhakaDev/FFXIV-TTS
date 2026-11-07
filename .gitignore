@@ -4,3 +4,4 @@ build/
 dist/
 .venv/
 venv/
+qwen3-tts/

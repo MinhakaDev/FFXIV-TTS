@@ -36,4 +36,10 @@ fi
 rm -rf dist/lexicons
 mv dist/lexicons.new dist/lexicons
 
+# The Qwen3-TTS voices ship like lexicons/; the engine downloads everything else itself.
+rm -rf dist/qwen3-voices
+if [ -d qwen3-voices ]; then
+    cp -r qwen3-voices dist/qwen3-voices
+fi
+
 echo "Build ready in dist/: ffxiv-tts and lexicons/ (settings/ is created on first run)"

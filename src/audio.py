@@ -155,14 +155,27 @@ class LinePlayer:
             raise sd.CallbackStop
 
 
-def play_test_tone(configured, seconds=0.5, frequency=440.0):
-    """Play a short tone through the configured device. Returns the device name used."""
+def _output_for(configured):
+    """(device index or None for the default, its sample rate) for playing outside the
+    TTS service, which may not have picked the device yet."""
     devices = sd.query_devices()
     index = select_output_device(devices, configured)
     sample_rate = int(
         devices[index]['default_samplerate'] if index is not None
         else sd.query_devices(kind='output')['default_samplerate']
     )
+    return index, sample_rate
+
+
+def play_samples(audio, sample_rate, configured):
+    """Play audio through the configured device, stopping what the last call played."""
+    index, device_rate = _output_for(configured)
+    sd.play(resample_audio(audio, sample_rate, device_rate), samplerate=device_rate, device=index)
+
+
+def play_test_tone(configured, seconds=0.5, frequency=440.0):
+    """Play a short tone through the configured device. Returns the device name used."""
+    index, sample_rate = _output_for(configured)
 
     t = np.linspace(0, seconds, int(sample_rate * seconds), endpoint=False)
     tone = 0.3 * np.sin(2 * np.pi * frequency * t)
@@ -174,4 +187,4 @@ def play_test_tone(configured, seconds=0.5, frequency=440.0):
     envelope[-fade:] = np.linspace(1, 0, fade)
 
     sd.play((tone * envelope).astype(np.float32), samplerate=sample_rate, device=index)
-    return devices[index]['name'] if index is not None else "system default"
+    return sd.query_devices(index)['name'] if index is not None else "system default"
