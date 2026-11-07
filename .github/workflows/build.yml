@@ -1,10 +1,10 @@
 name: Build binaries
 
 # Every push to main publishes a release with the next patch version, so there is no
-# need to create tags by hand. A push that only changes docs doesn't build. "[skip ci]"
-# skips a push entirely, but GitHub only reads it from the newest commit, so it also
-# skips any code commits pushed along with it. Manual runs build artifacts without
-# releasing.
+# need to create tags by hand. A push that only changes docs (Markdown, or the README's
+# screenshots in docs/) doesn't build. "[skip ci]" skips a push entirely, but GitHub only
+# reads it from the newest commit, so it also skips any code commits pushed along with
+# it. Manual runs build artifacts without releasing.
 on:
   push:
     branches:
@@ -13,6 +13,7 @@ on:
     # it still builds even when its newest commit only touched the docs.
     paths-ignore:
       - '**.md'
+      - 'docs/**'
       - 'LICENSE'
   workflow_dispatch:
 

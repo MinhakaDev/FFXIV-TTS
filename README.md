@@ -1,155 +1,214 @@
-# FFXIV Launcher with TTS Setup Guide
+# FFXIV TTS
 
 [![Latest release](https://img.shields.io/github/v/release/MinhakaDev/FFXIV-TTS)](https://github.com/MinhakaDev/FFXIV-TTS/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/MinhakaDev/FFXIV-TTS/total)](https://github.com/MinhakaDev/FFXIV-TTS/releases)
 [![License: MIT](https://img.shields.io/github/license/MinhakaDev/FFXIV-TTS)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-informational)
 
-This guide will help you set up the FFXIV Launcher with TTS (Text-to-Speech) and [kokoro-tts](https://github.com/nazdridoy/kokoro-tts) functionality.
+**Hear Final Fantasy XIV's dialogue read aloud.** FFXIV TTS gives the NPCs voices: over a
+hundred main characters each have a voice picked for them, and everyone else gets a male or
+female voice. It runs on your own PC. There's no account to make and nothing to pay for.
+
+![The FFXIV TTS window, running and connected to the game](docs/screenshots/run.png)
 
 ---
 
-## Why I Created This Project
-The purpose of this project is to enhance the FFXIV experience by integrating good quality Text-to-Speech (TTS) capabilities. Whether for accessibility, immersion, or just for fun, this setup makes the game more interactive and customizable.
+## What you need
+
+- **Final Fantasy XIV on Windows or Linux**, started with **XIVLauncher**, the community
+  launcher that adds plugins to the game. Step 1 below shows how to get it.
+- **The TextToTalk plugin**, installed from inside the game (step 2). It hands the dialogue to
+  FFXIV TTS.
+- **An internet connection the first time** you press Start, to download the voices
+  (about 330 MB). After that, FFXIV TTS works offline.
+- No graphics card needed: the standard voices run on any normal computer.
 
 ---
 
-## Installation Guide
+## Setup (about 10 minutes)
 
-If you don't already have the FFXIV launcher installed and configured, follow the instructions in
-[How to Install and Configure FFXIV Launcher](#how-to-install-and-configure-ffxiv-launcher) first.
+### Step 1: Install XIVLauncher
 
-### Option A: Download a release (recommended, no Python required)
+Skip this step if you already start the game with XIVLauncher.
 
-1. Download the latest release zip for your platform. It contains one app —
-   `ffxiv-tts.exe` on Windows, `ffxiv-tts` on Linux — plus a `lexicons/` folder. Keep them
-   together: the app creates its `settings/` folder next to them the first time it runs.
-2. Open the [FFXIV Launcher](#how-to-install-and-configure-ffxiv-launcher) and log in.
-3. Run the app and press **Start**. Everything else — voices, volumes, your name's
-   pronunciation, audio device — is in the same window (see [Settings](#settings)).
+1. Download XIVLauncher from [goatcorp.github.io](https://goatcorp.github.io) and install it.
+2. Open it and log in with your FFXIV account, as you would with the normal launcher.
 
-The first Start downloads the speech model, so it takes a minute and needs an internet
-connection. After that it starts quickly and works offline.
+### Step 2: Set up TextToTalk in the game
 
-`ffxiv-tts --headless` (`ffxiv-tts.exe --headless` on Windows) runs the TTS in a terminal
-without opening the window. On Windows the prompt comes back straight away, but the output
-keeps appearing in that terminal; press Ctrl+C there to stop it.
+1. Start the game with XIVLauncher and log in to a character.
+2. Type `/xlplugins` in the chat box and press Enter. The plugin installer opens.
+3. Search for **TextToTalk**, then press **Install**.
+4. Type `/tttconfig` in the chat box to open TextToTalk's settings.
+5. Change the **voice** to **WebSocket**.
+6. Change the **port** to **51363**.
+7. Choose what you want read out: NPC dialogue, party chat, /say and so on.
 
-**Updating:** unzip the new release over the old folder, replacing files when asked. The zip
-holds no settings, so yours are kept: region, volumes, voice tuning, audio device, character
-voices and your name's pronunciation. Characters the new release adds to the voice list are
-merged in, and characters you already have keep the voice you gave them.
+### Step 3: Download FFXIV TTS
 
-On Linux you'll also need the system audio libraries the binary links against:
-`sudo apt-get install portaudio19-dev libsndfile1 libasound2` (or your distro's equivalent —
-on Arch: `sudo pacman -S portaudio libsndfile alsa-lib`).
+1. Download the zip for your computer:
+   - **Windows:** [ffxiv-tts-windows.zip](https://github.com/MinhakaDev/FFXIV-TTS/releases/latest/download/ffxiv-tts-windows.zip)
+   - **Linux:** [ffxiv-tts-linux.zip](https://github.com/MinhakaDev/FFXIV-TTS/releases/latest/download/ffxiv-tts-linux.zip)
+2. Unzip it. On Windows: right-click the zip, choose **Extract All…**, then **Extract**.
+3. Move the folder somewhere it can stay, such as Documents. Keep everything in it together:
+   the app keeps its voices and your settings in the folders next to it.
 
-ALSA is deliberately not bundled, so the app uses your system's copy and can see the
-`pipewire`/`pulse` devices, which are ALSA plugins. If those don't appear in the settings
-app's device list, install the ALSA bridge for your sound server: `pipewire-alsa` (or
-`pulseaudio-alsa`) on Arch, `pipewire-alsa` / `libasound2-plugins` on Debian and Ubuntu.
+### Step 4: Start it
 
-### Option B: Run from source
+**Windows:** open the folder and double-click **`ffxiv-tts.exe`**. If Windows says
+*"Windows protected your PC"*, click **More info**, then **Run anyway**. Windows shows this
+for apps that aren't signed with a paid certificate, which is usual for small free apps.
 
-1. Download [Python 3.12](https://www.python.org/downloads/release/python-3120/).
-2. Download this GitHub repository.
-3. `pip install -r requirements.txt` (Linux also needs
-   `sudo apt-get install portaudio19-dev libsndfile1` first).
-4. Open the [FFXIV Launcher](#how-to-install-and-configure-ffxiv-launcher) and log in, then `python src/main.py`.
+**Linux:** first install two audio libraries, once, by pasting the line for your system into a
+terminal:
 
-`python src/main.py --headless` runs the TTS on the console without opening a window.
+| System | Command |
+| --- | --- |
+| Ubuntu, Mint, Debian, Pop!_OS | `sudo apt install libportaudio2 libsndfile1` |
+| Fedora | `sudo dnf install portaudio libsndfile` |
+| Arch, Manjaro, EndeavourOS | `sudo pacman -S portaudio libsndfile alsa-lib` |
 
----
+Then double-click **`ffxiv-tts`** in the folder. If it doesn't open, right-click it, open
+**Properties**, and allow it to run as a program (or run `./ffxiv-tts` in a terminal from
+that folder).
 
-### You're All Set!
-Congratulations! Your setup is complete, and you can now start listening instead of reading.
-
----
-## Settings
-The app's sidebar has everything you can customize:
-- [x] The Pronunciation of Your Name.
-- [x] If you want British English or American English
-- [x] The speed at which the male and female voices speak
-- [x] The Volume of the TTS
-- [x] Which voice each character/NPC speaks with
-- [x] Which audio device the speech plays through (with a "Test sound" button)
-- [ ] Use GPU
-
-**Hearing nothing?** Open the settings app, go to the **Audio** screen, and press
-**Test sound**. If you don't hear the tone, pick a different output device from the dropdown
-and test again until you do, then press Save.
-
-Leave the device on `auto` unless you have a reason not to: it follows whatever output your
-system is already using. On Linux, individual headsets usually do **not** appear in the
-dropdown — while PipeWire/PulseAudio owns the device its raw ALSA entry is hidden, which is
-normal. Keep `auto` and select the headset in your system's sound settings instead. Picking a
-raw `(hw:X,Y)` device directly is fragile: those vanish when a wireless headset sleeps and
-their numbering shifts between reboots.
+**Then press Start.** The first time, it downloads the voices, which takes a minute or two.
+When the window says **Connected to FFXIV. Waiting for dialogue...**, you're done: talk to
+an NPC and listen.
 
 ---
 
-## Releases
+## The app, screen by screen
 
-Users don't need any of this — they just download a release (Option A above). This section is
-for maintaining the project.
+The sidebar on the left switches between screens. Changes on most screens take effect once you
+press **Save**.
 
-### Automatic (how releases are published)
+### Run
 
-Every push to `main` builds the Windows `.exe` and the Linux binary on GitHub's runners, tags
-the commit with the next patch version, and publishes a GitHub Release with both zips attached.
-Nothing to run and no tags to create by hand — see
-[`.github/workflows/build.yml`](.github/workflows/build.yml).
+The screen in the picture at the top of this page.
 
-- Pushes that only change Markdown files or `LICENSE` don't build, so docs edits need nothing
-  special.
-- `[skip ci]` in a commit message skips a build, but GitHub only reads it from the newest
-  commit of a push, so it also skips any code commits pushed along with it. Push those
-  separately, or leave the marker off.
-- Bumping the minor or major version is the one manual step: create that tag yourself
-  (`git tag v0.2.0 && git push origin v0.2.0`) and subsequent pushes continue from it.
-- Running the workflow by hand from the Actions tab builds downloadable artifacts **without**
-  publishing a release, which is useful for testing a build.
+- **Start** and **Stop** turn the voices on and off. The game can be open or closed when you
+  press Start: the app keeps trying to connect until the game is there.
+- **Replay last line** says the last line of dialogue again.
+- **The box at the bottom** speaks whatever you type, so you can try out a voice.
+- **The text area** shows what the app is doing. Each line of dialogue appears there as
+  it's spoken.
 
-### Locally (developer convenience)
+### General: the speech engine and volume
 
-Building locally is just a faster feedback loop while developing — it isn't how releases are
-made, and it can't produce the Windows `.exe` (PyInstaller doesn't cross-compile).
+![The General screen, comparing the speech engines](docs/screenshots/general.png)
 
-One-time setup — the dependencies need Python 3.12, so if your system Python is newer
-(Arch ships 3.14), create a 3.12 environment with [uv](https://docs.astral.sh/uv/):
+- **Speech engine** chooses the voices. **Kokoro** is the standard one: quick, light, and fine
+  on any computer. **Qwen3** voices sound more natural, but they're still a test and need a
+  graphics card. Rest the mouse on an engine to see how they compare. Clicking an engine
+  switches to it straight away.
+- **Region** gives Kokoro's voices an American (US) or British (UK) accent.
+- **Speech speed** and the **volume** sliders set how fast and how loud the voices are.
+  **Preview** lets you hear them before you press Save.
 
-```bash
-uv python install 3.12
-uv venv --python 3.12 .venv
-sudo pacman -S portaudio libsndfile alsa-lib pipewire-alsa   # Arch; see Option A for Debian
-```
+### Voices: who speaks with which voice
 
-Then:
+With **Kokoro**, each character is given one of Kokoro's voices. Pick an expansion to find a
+character, choose a voice from their list, and press **▶** to hear them. Voices are graded from
+A (best) to F. **+ Add character** adds anyone missing. Press **Save** when you're done.
 
-```bash
-source .venv/bin/activate
-./build.sh
-./dist/ffxiv-tts
-```
+![The Voices screen with Kokoro](docs/screenshots/voices-kokoro.png)
 
-`build.sh` works with both plain and uv-created virtualenvs and keeps any settings you already
-configured in `dist/`. Faster still, for changes that aren't about packaging: run
-`python src/main.py` directly and skip PyInstaller entirely.
+With **Qwen3**, every character gets a voice of their own, made from a written description.
+Pick a name to see the description. To change their voice, edit the description, press
+**Design** to hear a new voice made from it, and press **Keep** when you like it.
+**Play current** plays the voice they have now. **Default female** and **Default male**, under
+*Defaults*, are the voices for everyone without one of their own.
 
-PyInstaller doesn't cross-compile, so build on the OS you're targeting: `build.sh` on Linux for
-the Linux binary, `build.bat` on Windows for the `.exe`. That's the main reason to use the
-GitHub build — it produces the Windows executable without needing a Windows machine.
+![The Voices screen with Qwen3](docs/screenshots/voices-qwen.png)
+
+### Name: how your character's name is said
+
+![The Name screen](docs/screenshots/name.png)
+
+Type your character's name and how it's pronounced, then press **Preview** to hear it and
+**Save** to keep it.
+
+- **Kokoro** wants the pronunciation in IPA, the phonetic alphabet. Ask ChatGPT
+  *"How do you say Minhaka in IPA?"* and check the answer at
+  [ipa-reader.com](https://ipa-reader.com).
+- **Qwen3** wants it spelled the way it sounds, such as *Mee-nyah-ka*.
+
+### Tuning
+
+Kokoro only. Makes one voice louder, quieter, faster or slower than the rest.
+
+### Audio: where the sound comes out
+
+![The Audio screen](docs/screenshots/audio.png)
+
+Leave the device on **auto**: it plays through whatever your computer is already using. Press
+**Test sound** to check. You should hear a short beep.
 
 ---
 
-## How to Install and Configure FFXIV Launcher
-1. Download the [FFXIV Launcher](https://goatcorp.github.io) from the official website
-3. Launch the FFXIV Launcher and log in with your account credentials.
-4. Open the settings and configure the launcher as needed:
-   - Add TTS functionality.
-   - Change Voice to WebSocket
-   - In TTS Settings Change the port to **51363**.
-   - Adjust player references in the settings.
-   - You can change what you hear in the setting (NPC, Party, Says).
+## Updating
 
-Return to the [Installation Guide](#installation-guide) once the FFXIV Launcher is installed and configured.
+When a new version is out, a banner appears on the Run screen with a **Download** button.
+
+1. Download the new zip.
+2. Unzip it **into the same folder** as before, and choose **Replace** when asked.
+
+Your settings, your choice of voice for each character and your name's pronunciation are kept.
+If you designed Qwen3 voices yourself, copy the `qwen3-voices` folder somewhere safe first:
+the update replaces it with the release's own voices.
+
+---
+
+## Something's not right?
+
+**The window says "Could not reach FFXIV".**
+FFXIV TTS can't find TextToTalk. Check that:
+- the game was started with XIVLauncher,
+- TextToTalk is installed and turned on (type `/toggletts` in game to turn it on or off),
+- TextToTalk's voice is set to WebSocket and its port to 51363.
+
+The app tries again every 5 seconds, so you don't need to restart it.
+
+**It says "Connected", but I hear nothing.**
+Go to the **Audio** screen and press **Test sound**. No beep? Check your computer's volume and
+that the right speakers or headset are selected in your system's sound settings. Leave the
+device on **auto**.
+
+**Windows deleted the app, or my antivirus warns about it.**
+Some antivirus programs distrust any new app that isn't signed. The app is built automatically
+from the code in this repository. You can allow it in your antivirus, or build it yourself (see
+below).
+
+**A name or word is said wrong.**
+For your own character, use the **Name** screen. For anyone else, the pronunciation lists are
+in the `lexicons` folder; see [lexicons/README.md](lexicons/README.md).
+
+**Qwen3 is slow, or stops between sentences.**
+Qwen3 needs a graphics card. Without one, switch back to **Kokoro** on the General screen.
+
+**Linux: my headset isn't in the Audio list.**
+That's normal: leave it on **auto** and pick the headset in your system's sound settings. If
+the list has no `pipewire` or `pulse` entry at all, install your sound server's ALSA bridge:
+`pipewire-alsa` on most systems (`libasound2-plugins` on older Debian and Ubuntu).
+
+**Still stuck?** [Open an issue](https://github.com/MinhakaDev/FFXIV-TTS/issues) and describe
+what happened. A copy of the text from the Run screen helps a lot.
+
+---
+
+## Why I made this
+
+To make FFXIV more immersive, and easier to enjoy for anyone who'd rather listen than read:
+for accessibility, immersion, or just for fun.
+
+## For developers
+
+Running from source, building the app and how releases are published:
+[docs/DEVELOPING.md](docs/DEVELOPING.md).
+
+## License
+
+[MIT](LICENSE). The voices come from [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) and
+[Qwen3-TTS](https://huggingface.co/Serveurperso/Qwen3-TTS-GGUF). The pronunciation lists come from
+[TextToTalk](https://github.com/karashiiro/TextToTalk/tree/main/lexicons).

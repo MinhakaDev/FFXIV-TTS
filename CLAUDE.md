@@ -33,6 +33,11 @@ folder to get the defaults back.
 
 There is no test suite and no linter configured. Verify changes by running the app.
 
+`README.md` is the players' guide, written for people with no technical background; developer
+material lives in `docs/DEVELOPING.md`. Take its screenshots (`docs/screenshots/`) from a
+release build, not a source run: uv's standalone Python ships Tk without Xft, so a source run
+draws everything in a bitmap font.
+
 ## Architecture
 
 `src/` is flat and imported as top-level modules (`import tts`, not `src.tts`) because
@@ -47,7 +52,9 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   exited (including joining its speaker thread), and that is what stops `start()` from running
   a second worker beside one still loading the model, speaking a line or waiting to reconnect —
   don't clear it in `stop()`. Kokoro is imported *inside* `_load()`, not at module scope, so the
-  window appears before torch's multi-second import. The websocket thread only queues lines; a
+  window appears before torch's multi-second import. Loading it silences a few harmless warnings
+  (`QUIET_WARNINGS`, Hugging Face's logger, Kokoro's default-`repo_id` one) that read as errors
+  in the Run screen's log to players. The websocket thread only queues lines; a
   speaker thread synthesizes each a sentence at a time (`SENTENCE_BREAK` as Kokoro's
   `split_pattern` — otherwise Kokoro takes up to ~510 phonemes, most whole lines, in one piece)
   and feeds the sentences to one `audio.LinePlayer` stream per line, so speech starts after the
@@ -198,9 +205,9 @@ Every push to `main` builds Linux + Windows on GitHub runners, auto-tags the nex
 stamps it into `src/version.py`, and publishes a release. Runs share one concurrency group, so a
 push during a build (~9 minutes) waits instead of computing the same version, and the tag is
 created at the commit that was built (`target_commitish`), not at `main`'s tip. Pushes that only
-change `*.md` or `LICENSE` don't build. `[skip ci]` skips a whole push, but GitHub reads it only
-from the newest commit, so it also skips code commits pushed along with it — never put it on a
-docs commit pushed on top of code. Minor/major bumps are the one manual step: push the tag
+change `*.md`, `docs/` (the README's screenshots) or `LICENSE` don't build. `[skip ci]` skips a
+whole push, but GitHub reads it only from the newest commit, so it also skips code commits
+pushed along with it — never put it on a docs commit pushed on top of code. Minor/major bumps are the one manual step: push the tag
 yourself first (`git tag v0.2.0 && git push origin v0.2.0`) and patch numbering continues from
 there. Manual `workflow_dispatch` runs build artifacts without releasing, stamped `<tag>-test`
 so they keep the update check off — use that to test a build. upload-artifact drops file

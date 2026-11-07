@@ -12,6 +12,7 @@ import queue
 import string
 import threading
 import time
+import warnings
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -47,6 +48,13 @@ QWEN_ENGINES = {"qwen3-0.6b": "0.6b", "qwen3-1.7b": "1.7b"}
 # whole. Splitting at sentence ends lets the first sentence play while the rest is
 # still being synthesized. The second alternative catches a sentence ending in a quote.
 SENTENCE_BREAK = r'(?<=[.!?…])\s+|(?<=[.!?…]["”’])\s+'
+# Harmless warnings from loading Kokoro, which read as errors in the Run screen's log:
+# torch's, about how Kokoro's model is built. Hugging Face's go through its logger.
+QUIET_WARNINGS = (
+    "dropout option adds dropout after all but last recurrent layer",
+    r"`torch.nn.utils.weight_norm` is deprecated",
+    r"`torch.jit.script` is deprecated",
+)
 # Stripped off a word before looking it up in the aliases, so "Minhaka," still matches.
 WORD_EDGES = string.punctuation + "“”‘’…"
 
@@ -344,9 +352,16 @@ class TTSService:
         else:
             # Imported here rather than at module scope: it pulls in torch and takes
             # several seconds, which would otherwise stall the app before it appears.
+            from huggingface_hub.utils import logging as hf_logging
             from kokoro import KPipeline
 
-            self.pipeline = KPipeline(lang_code=lang_code)
+            for message in QUIET_WARNINGS:
+                warnings.filterwarnings("ignore", message=message)
+            # Errors only: it warned about downloading without a Hugging Face account,
+            # which the model doesn't need.
+            hf_logging.set_verbosity_error()
+            # Named, or Kokoro prints a warning that it picked this one by default.
+            self.pipeline = KPipeline(lang_code=lang_code, repo_id="hexgrad/Kokoro-82M")
             self.synthesis_rate = KOKORO_SAMPLE_RATE
         self._load_lexicons()
 
