@@ -88,6 +88,8 @@ jobs:
           if [ "$RUNNER_OS" = "Linux" ]; then
             # The C++ runtime inside, so it doesn't depend on the user's libstdc++.
             flags+=("-DCMAKE_SHARED_LINKER_FLAGS=-static-libstdc++ -static-libgcc")
+            # The SDK keeps the loader in lib/VulkanLoader/lib, where FindVulkan doesn't look.
+            flags+=("-DVulkan_LIBRARY=$VULKAN_SDK/lib/VulkanLoader/lib/libvulkan.so")
           else
             # The static C runtime, so it doesn't need the Visual C++ redistributable.
             flags+=(-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded)
