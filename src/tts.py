@@ -67,6 +67,9 @@ class Line:
     speed: float
     # Who says it, when known: Qwen3-TTS gives a character their own voice.
     person: str = ""
+    # Whose race voices Qwen3-TTS picks from when they have none of their own:
+    # voice_data.race_of(), "" when the game didn't say.
+    race: str = ""
     # Set when queued. A line whose generation is no longer current has been
     # superseded by a newer one or a Cancel, and is abandoned.
     generation: int = 0
@@ -380,8 +383,20 @@ class TTSService:
         self.aliases = aliases
         print(f"Loaded pronunciation lexicons ({len(self.aliases)} replacements)")
 
-    def voice_for(self, person, fallback):
-        return self.voice_lookup.get(person.lower(), fallback)
+    def voice_for(self, person, fallback, race=""):
+        """Their voice from voices.json. For anyone missing from it, one picked by their
+        name, so they always sound the same: from their race's voices when the game
+        says it, else from the voices for other names. The fallback if neither is known."""
+        voice = self.voice_lookup.get(person.lower())
+        if voice:
+            return voice
+        gender = voice_data.classify_gender(fallback)
+        voices = voice_data.RACE_VOICES.get(race, {}).get(gender)
+        if voices:
+            return voice_data.voice_by_name(person, voices)
+        if person:
+            return voice_data.voice_by_name(person, voice_data.NAMED_VOICES[gender])
+        return fallback
 
     def _speak_loop(self, requests):
         while True:
@@ -397,7 +412,9 @@ class TTSService:
         """The line's audio a piece at a time: a sentence from Kokoro, a few frames
         from Qwen3-TTS, which streams."""
         if self.qwen is not None:
-            return self.qwen.speak(line.text, line.voice, line.person, lambda: self._superseded(line))
+            return self.qwen.speak(
+                line.text, line.voice, line.person, line.race, lambda: self._superseded(line)
+            )
         return (
             audio for _, _, audio in self.pipeline(
                 line.text, voice=line.voice, speed=line.speed, split_pattern=SENTENCE_BREAK
@@ -484,12 +501,14 @@ class TTSService:
             reported_gender = data.get("Voice", {}).get("Name", "").lower()
             payload = apply_aliases(data.get("Payload", ""), self.aliases)
 
-            fallback = self.female_voice if reported_gender == "female" else self.male_voice
-            voice = self.voice_for(speaker, fallback)
-            print(f"{speaker or 'Unknown'}: {payload}")
-            print(f"  voice: {self.qwen.voice_name(speaker, voice) if self.qwen else voice}")
+            race = voice_data.race_of(data.get("Race"), data.get("BodyType"))
 
-            self.last_line = Line(payload, voice, *self._playback_for(voice), person=speaker)
+            fallback = self.female_voice if reported_gender == "female" else self.male_voice
+            voice = self.voice_for(speaker, fallback, race)
+            print(f"{speaker or 'Unknown'}{f' ({race})' if race else ''}: {payload}")
+            print(f"  voice: {self.qwen.voice_name(speaker, voice, race) if self.qwen else voice}")
+
+            self.last_line = Line(payload, voice, *self._playback_for(voice), person=speaker, race=race)
             self._enqueue(self.last_line)
 
         except Exception as exc:

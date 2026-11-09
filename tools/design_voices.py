@@ -13,8 +13,10 @@ from tools/setup_qwen3.sh, or is downloaded once the qwen3-runtime workflow publ
 An entry is a description, or {"instruct": description, "seed": n}: the seed picks
 which voice the description gets (1 when absent), so change it to try another one.
 The Voices screen, under Qwen3, stores the seed of each voice it keeps.
-Entries named after a character are that character's voice; "default female" and
-"default male" speak for every character without one, by their Kokoro voice's gender.
+Entries named after a character are that character's voice. A character without one gets
+one of their race's voices ("lalafell female 1"...), or one of those named after Kokoro
+voices when the game doesn't say their race; "default female" and "default male" speak
+lines with neither a name nor a race.
 """
 
 import os

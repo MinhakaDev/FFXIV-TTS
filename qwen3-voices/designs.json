@@ -540,6 +540,166 @@
     "default male": {
       "instruct": "A young adult man with an energetic, expressive American voice. Confident and lively, medium pitch, clear diction.",
       "seed": 1
+    },
+    "hyur female 1": {
+      "seed": 1,
+      "instruct": "A young adult woman with a clear, friendly, natural American voice. Warm and down-to-earth, medium pitch, relaxed delivery."
+    },
+    "hyur female 2": {
+      "seed": 1,
+      "instruct": "A woman in her forties with a firm, practical, slightly husky voice. Capable and no-nonsense, medium-low pitch, brisk delivery."
+    },
+    "hyur male 1": {
+      "seed": 1,
+      "instruct": "A young adult man with a clear, easygoing American voice. Friendly and honest, medium pitch, relaxed delivery."
+    },
+    "hyur male 2": {
+      "seed": 1,
+      "instruct": "A man in his forties with a rough, weathered, working-class voice. Gruff but fair, medium-low pitch, plain delivery."
+    },
+    "elezen female 1": {
+      "seed": 1,
+      "instruct": "A tall, graceful woman with a refined, elegant voice and a light French accent. Poised and proud, medium pitch, precise delivery."
+    },
+    "elezen female 2": {
+      "seed": 1,
+      "instruct": "A tall woman with a cool, cultured British voice. Reserved and dignified, medium-low pitch, measured delivery."
+    },
+    "elezen male 1": {
+      "seed": 1,
+      "instruct": "A tall, slender man with a refined, aristocratic voice and a light French accent. Courteous and proud, medium pitch, precise delivery."
+    },
+    "elezen male 2": {
+      "seed": 1,
+      "instruct": "A tall man with a calm, cultured British voice. Stern and dignified, low pitch, measured delivery."
+    },
+    "lalafell female 1": {
+      "seed": 1,
+      "instruct": "A very small woman with a high, bright, bubbly voice. Cheerful and quick, high pitch, chirpy and energetic delivery."
+    },
+    "lalafell female 2": {
+      "seed": 1,
+      "instruct": "A very small woman with a high, sweet, clever voice. Polite and businesslike, high pitch, quick and precise delivery."
+    },
+    "lalafell male 1": {
+      "seed": 1,
+      "instruct": "A very small man with a high, lively, cheerful voice. Excitable and friendly, high pitch, quick and bouncy delivery."
+    },
+    "lalafell male 2": {
+      "seed": 1,
+      "instruct": "A very small man with a light, slightly nasal, scholarly voice. Fussy and self-important, medium-high pitch, quick and precise delivery."
+    },
+    "miqo'te female 1": {
+      "seed": 1,
+      "instruct": "A young woman with a lively, playful, slightly purring voice. Curious and mischievous, medium-high pitch, quick delivery."
+    },
+    "miqo'te female 2": {
+      "seed": 1,
+      "instruct": "A woman with a low, smooth, self-assured voice. Cool and wry, medium-low pitch, unhurried delivery."
+    },
+    "miqo'te male 1": {
+      "seed": 1,
+      "instruct": "A young man with a light, cocky, playful voice. Confident and teasing, medium pitch, quick delivery."
+    },
+    "miqo'te male 2": {
+      "seed": 1,
+      "instruct": "A lean man with a quiet, calm, watchful voice. Reserved and steady, medium-low pitch, soft delivery."
+    },
+    "roegadyn female 1": {
+      "seed": 1,
+      "instruct": "A tall, powerfully built woman with a strong, hearty, full voice. Bold and warm, medium-low pitch, loud and confident delivery."
+    },
+    "roegadyn female 2": {
+      "seed": 1,
+      "instruct": "A tall, broad woman with a deep, steady, no-nonsense voice. Tough and dependable, low pitch, firm delivery."
+    },
+    "roegadyn male 1": {
+      "seed": 1,
+      "instruct": "A huge, powerfully built man with a deep, booming, hearty voice. Jovial and loud, very low pitch, rumbling delivery."
+    },
+    "roegadyn male 2": {
+      "seed": 1,
+      "instruct": "A huge man with a deep, gruff, gravelly sailor's voice. Blunt and tough, very low pitch, rough delivery."
+    },
+    "au ra female 1": {
+      "seed": 1,
+      "instruct": "A slender young woman with a clear, cool, composed voice. Polite and reserved, medium-high pitch, gentle and measured delivery."
+    },
+    "au ra female 2": {
+      "seed": 1,
+      "instruct": "A woman with a sharp, fierce, proud voice. Bold and direct, medium pitch, strong and clipped delivery."
+    },
+    "au ra male 1": {
+      "seed": 1,
+      "instruct": "A tall, lean man with a calm, cool, disciplined voice. Stoic and polite, medium-low pitch, measured delivery."
+    },
+    "au ra male 2": {
+      "seed": 1,
+      "instruct": "A strong man with a fierce, rough, proud warrior's voice. Bold and blunt, low pitch, forceful delivery."
+    },
+    "hrothgar female 1": {
+      "seed": 1,
+      "instruct": "A large, powerful woman with a deep, husky, resonant voice. Calm and strong, low pitch, steady delivery."
+    },
+    "hrothgar female 2": {
+      "seed": 1,
+      "instruct": "A large woman with a low, rough, slightly growling voice. Fierce and protective, low pitch, firm delivery."
+    },
+    "hrothgar male 1": {
+      "seed": 1,
+      "instruct": "A huge, beastlike man with a very deep, gravelly, growling voice. Quiet and gentle, very low pitch, slow delivery."
+    },
+    "hrothgar male 2": {
+      "seed": 1,
+      "instruct": "A huge, powerful man with a deep, rough, rumbling voice. Proud and fierce, very low pitch, forceful delivery."
+    },
+    "viera female 1": {
+      "seed": 1,
+      "instruct": "A tall, graceful woman with a cool, low, elegant voice. Aloof and self-possessed, medium-low pitch, slow and deliberate delivery."
+    },
+    "viera female 2": {
+      "seed": 1,
+      "instruct": "A tall young woman with a soft, clear, gentle voice. Quiet and watchful, medium pitch, calm delivery."
+    },
+    "viera male 1": {
+      "seed": 1,
+      "instruct": "A tall, lean man with a soft, calm, low voice. Quiet and serious, medium-low pitch, slow and deliberate delivery."
+    },
+    "viera male 2": {
+      "seed": 1,
+      "instruct": "A tall young man with a smooth, gentle, elegant voice. Polite and distant, medium pitch, measured delivery."
+    },
+    "youth female 1": {
+      "seed": 1,
+      "instruct": "A young girl of about ten with a high, bright, cheerful voice. Curious and energetic, high pitch, quick delivery."
+    },
+    "youth female 2": {
+      "seed": 1,
+      "instruct": "A girl of about twelve with a soft, sweet, shy voice. Gentle and polite, high pitch, quiet delivery."
+    },
+    "youth male 1": {
+      "seed": 1,
+      "instruct": "A young boy of about ten with a high, eager, lively voice. Excitable and bold, high pitch, quick delivery."
+    },
+    "youth male 2": {
+      "seed": 1,
+      "instruct": "A boy of about twelve with a clear, earnest, slightly shy voice. Polite and serious, medium-high pitch, careful delivery."
+    },
+    "elder female 1": {
+      "seed": 1,
+      "instruct": "An old woman in her seventies with a warm, slightly thin, gentle voice. Kind and wise, medium pitch, slow delivery."
+    },
+    "elder female 2": {
+      "seed": 1,
+      "instruct": "An old woman with a dry, sharp, crackly voice. Stern and shrewd, medium-low pitch, deliberate delivery."
+    },
+    "elder male 1": {
+      "seed": 1,
+      "instruct": "An old man in his seventies with a warm, gravelly, gentle voice. Kind and wise, low pitch, slow delivery."
+    },
+    "elder male 2": {
+      "seed": 1,
+      "instruct": "An old man with a dry, raspy, grumpy voice. Stubborn and sharp-tongued, medium-low pitch, deliberate delivery."
     }
   }
 }

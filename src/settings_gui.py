@@ -1123,12 +1123,25 @@ class QwenVoicesScreen(Screen):
     title = "Voices"
     subtitle = ("Pick a name to see the description its voice was made from. Change it, press\n"
                 "Design to hear a new voice, and Keep the one you like. Grayed names have no\n"
-                "voice of their own yet, so they use the default for their gender.")
+                "voice of their own yet, so they get one by their race or name.")
 
     # Characters that can't go in a file name, which is what a voice is saved as.
     UNSAFE = set('/\\:*?"<>|')
     DEFAULTS = "Defaults"
+    RACES = "Races"
     OTHER = "Other names"
+    # {clip name: (race or age, gender)} for every race voice.
+    RACE_CLIPS = {
+        name: (race, gender)
+        for race in voice_data.RACES + voice_data.AGES
+        for gender in qwen_engine.GENDER_VOICES
+        for name in qwen_engine.race_voices(race, gender)
+    }
+    # Who a race voice speaks for, by race or age and gender.
+    AGE_PEOPLE = {
+        ("youth", "female"): "girls", ("youth", "male"): "boys",
+        ("elder", "female"): "old women", ("elder", "male"): "old men",
+    }
     # The editor's width, which its labels wrap to.
     WRAP = 360
 
@@ -1242,15 +1255,18 @@ class QwenVoicesScreen(Screen):
             for people in characters.values() for person, voice in people.items()
         }
 
-        groups = {self.DEFAULTS: sorted(DEFAULT_GENDERS)}
+        groups = {self.DEFAULTS: sorted(DEFAULT_GENDERS), self.RACES: list(self.RACE_CLIPS)}
         for expansion in sorted(characters, key=lambda e: (
             voice_data.EXPANSIONS.index(e) if e in voice_data.EXPANSIONS else len(voice_data.EXPANSIONS), e
         )):
             groups[expansion] = sorted(person.lower() for person in characters[expansion])
-        # The clips named after Kokoro voices are what characters fell back on before the
-        # defaults; nothing speaks with them now.
+        # The clips named after Kokoro voices speak for names with no voice of their own
+        # when the game doesn't say their race (qwen_engine.NAMED_VOICES): they aren't a
+        # name's own, so they aren't listed.
         others = (set(self.designs) | set(self.clips) | self.added) - set(self.genders)
-        groups[self.OTHER] = sorted(others - set(DEFAULT_GENDERS) - set(voice_data.VOICE_GRADES))
+        groups[self.OTHER] = sorted(
+            others - set(DEFAULT_GENDERS) - set(self.RACE_CLIPS) - set(voice_data.VOICE_GRADES)
+        )
         self.groups = {group: names for group, names in groups.items() if names}
 
         self.group.configure(values=list(self.groups))
@@ -1309,22 +1325,29 @@ class QwenVoicesScreen(Screen):
         self._update_buttons()
 
     def _fallback(self, name):
-        """The default a name speaks with while it has no voice of its own: None for a
-        name voices.json doesn't have, whose gender the game reports line by line."""
+        """The clip a name speaks with while it has no voice of its own and the game
+        doesn't say their race: None for a name voices.json doesn't have, whose gender
+        the game reports line by line."""
         gender = self.genders.get(name)
-        return qwen_engine.GENDER_VOICES[gender] if gender else None
+        return voice_data.voice_by_name(name, qwen_engine.NAMED_VOICES[gender]) if gender else None
 
     def _describe(self):
         name = self.selected
         if name in DEFAULT_GENDERS:
-            text = f"Speaks for every {DEFAULT_GENDERS[name]} character without a voice of their own."
+            text = (f"Speaks for every {DEFAULT_GENDERS[name]} line that comes without a name "
+                    "or a race.")
+        elif name in self.RACE_CLIPS:
+            race, gender = self.RACE_CLIPS[name]
+            people = self.AGE_PEOPLE.get((race, gender)) or f"{gender} {self.display(race)}"
+            text = (f"Speaks for some of the {people} without a voice of their own, each "
+                    "picked by their name.")
+            if name not in self.clips:
+                text += " It has no voice yet: describe one and press Design."
         elif name in self.clips:
             text = "Has a voice of their own."
-        elif self._fallback(name):
-            text = f"No voice of their own yet, so they speak with the {self._fallback(name)} voice."
         else:
-            text = ("No voice of their own yet, so they speak with the default voice for the "
-                    "gender the game reports.")
+            text = ("No voice of their own yet. They speak with one of their race's voices, or "
+                    "one picked by their name when the game doesn't say their race.")
         self.about.configure(text=text)
 
     def _update_buttons(self):
@@ -1419,7 +1442,8 @@ class QwenVoicesScreen(Screen):
             self._play(self.candidate["samples"])
 
     def play_current(self):
-        """The voice the selected name speaks with now: their own, else their default."""
+        """The voice the selected name speaks with now: their own, else the one picked by
+        their name for when the game doesn't say their race."""
         for name in (self.selected, self._fallback(self.selected)):
             if name in self.clips:
                 self._play(qwen_engine.read_wav(

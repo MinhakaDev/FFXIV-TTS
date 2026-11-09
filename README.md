@@ -111,14 +111,19 @@ The screen in the picture at the top of this page.
 With **Kokoro**, each character is given one of Kokoro's voices. Pick an expansion to find a
 character, choose a voice from their list, and press **▶** to hear them. Voices are graded from
 A (best) to F. **+ Add character** adds anyone missing. Press **Save** when you're done.
+Anyone not on the list gets a voice that suits their race, or a child's or an old person's,
+picked from their name so they sound the same every time you meet them.
 
 ![The Voices screen with Kokoro](docs/screenshots/voices-kokoro.png)
 
 With **Qwen3**, every character gets a voice of their own, made from a written description.
 Pick a name to see the description. To change their voice, edit the description, press
 **Design** to hear a new voice made from it, and press **Keep** when you like it.
-**Play current** plays the voice they have now. **Default female** and **Default male**, under
-*Defaults*, are the voices for everyone without one of their own.
+**Play current** plays the voice they have now. Anyone without a voice of their own gets one
+of their race's voices, picked from their name so they sound the same every time you meet
+them. You'll find those under *Races*, with the voices for children and old people, and you
+can redesign them like any other. **Default female** and **Default male**, under *Defaults*,
+speak lines that come without a name.
 
 ![The Voices screen with Qwen3](docs/screenshots/voices-qwen.png)
 

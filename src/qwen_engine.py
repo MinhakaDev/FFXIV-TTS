@@ -65,6 +65,23 @@ QUANTS = ("Q8_0", "Q4_K_M", "BF16", "F32")
 # Who speaks for a character with no clip of their own, by the gender of their Kokoro
 # voice: made on the Voices screen like anyone's.
 GENDER_VOICES = {"female": "default female", "male": "default male"}
+# What a named character without a clip of their own speaks with, picked by
+# voice_data.voice_by_name(): the clips named after Kokoro voices, designed from the
+# descriptions in designs.json. Listed rather than read from the folder: adding or
+# removing one moves most characters to another clip.
+NAMED_VOICES = {
+    "female": (
+        "af_aoede", "af_bella", "af_heart", "af_kore", "af_nicole", "af_nova",
+        "af_sarah", "af_sky", "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
+    ),
+    "male": (
+        "am_echo", "am_eric", "am_fenrir", "am_michael", "am_puck",
+        "bm_daniel", "bm_fable", "bm_george", "bm_lewis", "zm_yunjian",
+    ),
+}
+# How many voices each of voice_data.RACES and AGES has for each gender: race_voices().
+# Fixed, like NAMED_VOICES.
+RACE_VOICE_COUNT = 2
 # The library's INFO log is chatty; these say which device loaded and how fast each
 # line was.
 LOG_SHOWN = ("[Load]", "[Perf] Total")
@@ -262,6 +279,11 @@ def clip_names():
         name for name, extension in map(os.path.splitext, os.listdir(voices_dir()))
         if extension.lower() == ".wav"
     )
+
+
+def race_voices(race, gender):
+    """The clips for one of voice_data.RACES or AGES and a gender: "lalafell female 1"..."""
+    return tuple(f"{race} {gender} {n}" for n in range(1, RACE_VOICE_COUNT + 1))
 
 
 def read_wav(path):
@@ -496,16 +518,25 @@ class QwenEngine:
         self.clips[name] = _clip(name)
         self._latents.pop(name, None)
 
-    def voice_name(self, person, voice):
-        """The clip a character speaks with: their own, else the default for their
-        Kokoro voice's gender."""
-        for name in ((person or "").lower(), GENDER_VOICES[voice_data.classify_gender(voice)]):
+    def voice_name(self, person, voice, race=""):
+        """The clip a character speaks with: their own. Without one, a clip picked by
+        their name, so they always sound the same: from their race's (race_voices())
+        when the game says it, else from NAMED_VOICES. The default for their Kokoro
+        voice's gender if neither is known."""
+        gender = voice_data.classify_gender(voice)
+        person = (person or "").lower()
+        names = [person]
+        if race:
+            names.append(voice_data.voice_by_name(person, race_voices(race, gender)))
+        if person:
+            names.append(voice_data.voice_by_name(person, NAMED_VOICES[gender]))
+        for name in names + [GENDER_VOICES[gender]]:
             if name in self.clips:
                 return name
         return next(iter(self.clips))
 
-    def speak(self, text, voice, person, cancelled):
-        name = self.voice_name(person, voice)
+    def speak(self, text, voice, person, race, cancelled):
+        name = self.voice_name(person, voice, race)
         # Read once: reload() on the UI thread can drop the entry between a check and
         # a second lookup, which lost the line to a KeyError.
         reference = self._latents.get(name)

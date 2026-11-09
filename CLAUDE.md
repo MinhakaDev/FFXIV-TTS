@@ -105,10 +105,20 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   Kokoro's region) and Audio offer `RunScreen.restart()`, which starts again from
   `show_state()` once the old worker has exited. Name's Preview speaks the unsaved IPA through misaki's
   `[word](/phonemes/)` markup. `QwenVoicesScreen` lists names a group at a time (the defaults,
-  each expansion, other names): one dropdown of every voice ran off the bottom of the screen.
+  the race voices, each expansion, other names): one dropdown of every voice ran off the bottom of the screen.
 - **`voices.py`** — shared character→voice data plus Kokoro's published quality grades. The
   picker sorts females first, then by grade, since every male voice is C+ or below.
   `classify_gender()` reads the id's second letter (Kokoro ids are `<lang><gender>_<name>`).
+  A character missing from `voices.json` gets a voice picked by `voice_by_name()`, so they
+  sound the same in every session. It comes from `RACE_VOICES` when the plugin's `Race`
+  names one of `RACES`: `race_of()` reads `Race` and `BodyType`, and a "Youth" or "Elder"
+  gets that age's voices whatever the race. Otherwise it comes from `NAMED_VOICES`. Qwen3 has
+  its own lists for both. Only a line with neither a name nor a race gets the region's
+  default. The pick uses a crc32 of the name, because `hash()` changes on every run (Python
+  salts string hashes). All these lists are written out, not built from what's installed,
+  because adding or removing a voice moves most characters to a different one. The plugin
+  sends `Race` as the Race sheet's name in the *client's* language, so a non-English client
+  matches no race and gets `NAMED_VOICES`.
 - **`audio.py`** — PortAudio device selection. Deliberately prefers a `pipewire`/`pulse` device
   over ALSA's `default` alias, which doesn't follow the user's desktop audio setting. Two other
   workarounds live here: saved device names are matched with the `(hw:X,Y)` suffix stripped
@@ -128,10 +138,13 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   none is a real person's. The Voices screen under Qwen3 makes one at a time (a new random seed
   per Design; Keep saves the clip and its seed, and `TTSService.reload_voice()` swaps it into
   the running engine); `tools/design_voices.py` remakes any from their saved seed. The Base
-  model clones them, choosing the character's own, else `GENDER_VOICES` (`default female` /
-  `default male`) by their Kokoro voice's gender, and looks for them before downloading
-  anything. The clips named after Kokoro voices (`af_heart`...) are what characters fell back on
-  before the defaults; nothing uses them now. It reads plain text, so
+  model clones them, choosing the character's own. A character without one gets a clip
+  picked by their name. When the game says their race, it comes from `race_voices()`: the
+  `RACE_VOICE_COUNT` clips per race and gender, named like `lalafell female 1`, which the
+  Voices screen lists under *Races*. Otherwise it comes from `NAMED_VOICES`, the clips named
+  after Kokoro voices (`af_heart`...). A line with neither gets `GENDER_VOICES` (`default
+  female` / `default male`) by its Kokoro voice's gender. The engine looks for the clips
+  before downloading anything. It reads plain text, so
   only the lexicons' `<alias>` entries apply, and it ignores the speed settings. `speak()` reads
   `_latents` once: `reload()` runs on the UI thread and can drop an entry mid-lookup.
 - **`updates.py`** / **`version.py`** — update check against the GitHub Releases API. It only
