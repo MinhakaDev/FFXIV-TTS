@@ -57,6 +57,8 @@ QUIET_WARNINGS = (
 )
 # Stripped off a word before looking it up in the aliases, so "Minhaka," still matches.
 WORD_EDGES = string.punctuation + "“”‘’…"
+# How many characters the Recent screen remembers, latest first.
+HEARD_LIMIT = 40
 
 
 @dataclasses.dataclass
@@ -139,6 +141,12 @@ class TTSService:
         # The last line from the game, kept for replay() - including one skipped before
         # it was spoken.
         self.last_line = None
+        # {lowercased name: Line}, each named character's latest line, oldest first, for
+        # the Recent screen. Kept across Stop and Start. heard_count goes up with every
+        # line, so the screen can tell when to look again.
+        self._heard = {}
+        self._heard_lock = threading.Lock()
+        self.heard_count = 0
         self._requests = queue.Queue()
         self._lock = threading.Lock()
         self._generation = 0
@@ -220,14 +228,33 @@ class TTSService:
         ))
         return True
 
-    def replay(self):
-        """Speak the last line from the game again. False if there's none yet or the
-        model hasn't loaded."""
-        line = self.last_line
+    def replay(self, line=None, voice=None):
+        """Speak a line from the game again: the last one, unless given one from heard().
+        With a voice, in that one, at its volume and speed. False if there's none yet or
+        the model hasn't loaded."""
+        line = line or self.last_line
         if not self.ready or line is None:
             return False
+        if voice is not None:
+            volume, speed = self._playback_for(voice)
+            line = dataclasses.replace(line, voice=voice, volume=volume, speed=speed)
         self._enqueue(line)
         return True
+
+    def heard(self):
+        """Each named character's latest line, latest first."""
+        with self._heard_lock:
+            return list(reversed(self._heard.values()))
+
+    def _remember(self, line):
+        with self._heard_lock:
+            key = line.person.lower()
+            # Popped first, so speaking again moves them to the end.
+            self._heard.pop(key, None)
+            self._heard[key] = line
+            if len(self._heard) > HEARD_LIMIT:
+                del self._heard[next(iter(self._heard))]
+            self.heard_count += 1
 
     def reload_voice(self, name):
         """Use a Qwen3-TTS voice clip the Voices screen just made, from the next line."""
@@ -510,6 +537,8 @@ class TTSService:
 
             self.last_line = Line(payload, voice, *self._playback_for(voice), person=speaker, race=race)
             self._enqueue(self.last_line)
+            if speaker:
+                self._remember(self.last_line)
 
         except Exception as exc:
             print(f"Error handling message: {exc}")

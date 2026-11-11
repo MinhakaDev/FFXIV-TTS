@@ -94,6 +94,22 @@ The screen in the picture at the top of this page.
 - **The text area** shows what the app is doing. Each line of dialogue appears there as
   it's spoken.
 
+### Recent: who just spoke
+
+Everyone who has spoken since you opened the app, the latest at the top, with what they said
+last. When a voice doesn't suit someone, change it here instead of looking for them on the
+Voices screen.
+
+- With **Kokoro**, pick another voice from their list. It's saved straight away, and they
+  speak with it from their next line. **▶** plays what they last said in the voice on their
+  row, so you can try a few.
+- With **Qwen3**, **▶** plays their last line again, and **Design** opens the Voices screen on
+  them to make them a voice of their own.
+
+Next to each name it says where their voice comes from: *voice assigned* (*own voice* with
+Qwen3) when it was chosen for them, or *picked by race* or *picked by name* when the app
+picked it.
+
 ### General: the speech engine and volume
 
 ![The General screen, comparing the speech engines](docs/screenshots/general.png)

@@ -64,7 +64,9 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   `say()` (previews, the Run screen's Say box) and `replay()` go through that same queue, so the
   pipeline is only ever used from the speaker thread; both need `ready` (model loaded).
   `replay()` re-synthesizes `last_line` rather than keeping audio, so a line skipped before
-  it finished can be replayed too. Playback volume and speed come from the
+  it finished can be replayed too; given a line from `heard()` and a voice, it speaks that
+  one in that voice. `heard()` is each named speaker's latest `Line` (up to `HEARD_LIMIT`,
+  kept across Stop/Start), and `heard_count` rises with every line so the GUI can poll it. Playback volume and speed come from the
   `settings["voice_settings"]` override for the chosen voice where it has one; otherwise
   volume falls back to the per-*gender* default keyed on the voice's own gender
   (`voice_data.classify_gender(voice)`, where `voice_data` is `voices.py`) and speed to the
@@ -72,7 +74,7 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   not the plugin's reported `Voice.Name` — that field is only the fallback for characters
   absent from `voices.json`. Comparing against `female_voice` instead was a real bug: it
   matched only the one regional default, so every other female voice played at the male volume.
-- **`settings_gui.py`** — sidebar of `Screen` subclasses (Run/General/Tuning/Name/Voices/Audio),
+- **`settings_gui.py`** — sidebar of `Screen` subclasses (Run/Recent/General/Tuning/Name/Voices/Audio),
   registered in `SettingsApp.SCREENS`; under Qwen3 the Voices button opens `QwenVoicesScreen`
   instead (`SettingsApp.QWEN_SCREENS`, resolved by `screen_for()`) and Tuning leaves the
   sidebar (`KOKORO_ONLY`). Screens are built once and kept; `SettingsApp.show()`
@@ -106,6 +108,12 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   `show_state()` once the old worker has exited. Name's Preview speaks the unsaved IPA through misaki's
   `[word](/phonemes/)` markup. `QwenVoicesScreen` lists names a group at a time (the defaults,
   the race voices, each expansion, other names): one dropdown of every voice ran off the bottom of the screen.
+  `RecentScreen` lists `heard()`, polling `heard_count` only while it's shown, and moves its
+  rows rather than rebuilding them, so a voice menu open on one stays open when someone else
+  speaks. Picking a voice there saves that one character at once (`assign_voice()`) and passes
+  it to `VoicesScreen.assigned()`: that screen keeps its records in memory, and its next Save
+  would otherwise put the old voice back. Under Qwen3 its Design button opens
+  `QwenVoicesScreen.add_voice()` on the speaker.
 - **`voices.py`** — shared character→voice data plus Kokoro's published quality grades. The
   picker sorts females first, then by grade, since every male voice is C+ or below.
   `classify_gender()` reads the id's second letter (Kokoro ids are `<lang><gender>_<name>`).

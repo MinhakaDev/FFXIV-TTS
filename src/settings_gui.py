@@ -113,6 +113,22 @@ def save_records(records):
     voice_data.save(VOICES_PATH, data)
 
 
+def assign_voice(person, voice):
+    """Give one character a voice in voices.json, changing no one else's."""
+    data = voice_data.load(VOICES_PATH)
+    key = person.lower()
+    found = False
+    for characters in data.values():
+        for name in characters:
+            if name.lower() == key:
+                characters[name] = voice
+                found = True
+    if not found:
+        # voices.json keeps names lowercase.
+        data.setdefault("Custom", {})[key] = voice
+    voice_data.save(VOICES_PATH, data)
+
+
 def build_name_lexicon(name, pronunciation, respelling):
     """The name's lexeme: the IPA for Kokoro, and the respelling, an alias, for Qwen3-TTS,
     which reads plain text. tts.parse_pls() gives each engine its own."""
@@ -1109,6 +1125,22 @@ class VoicesScreen(Screen):
         row.destroy()
         self.count.configure(text=f"{len(self.rows)} of {len(self.records)} characters")
 
+    def assigned(self, person, voice):
+        """Take in a voice the Recent screen saved for someone, so a Save here keeps it.
+        Edits made here stay unsaved."""
+        self.commit_rows()
+        key = person.lower()
+        matches = [r for r in self.records if r["person"].strip().lower() == key]
+        for record in matches:
+            record["voice"] = voice
+        if not matches:
+            self.records.append({"expansion": "Custom", "person": key, "voice": voice})
+        # rebuild() reads the rows back into their records first, so they must show it too.
+        for row in self.rows:
+            if row.record in matches:
+                row.voice.set(voice_data.describe_voice(voice))
+        self.rebuild()
+
     def save(self):
         self.commit_rows()
         save_records(self.records)
@@ -1384,7 +1416,9 @@ class QwenVoicesScreen(Screen):
         self.group.set(next(group for group, names in self.groups.items() if name in names))
         self.show_group()
         self.select(name)
-        self._say("Describe their voice, then press Design.")
+        # The Recent screen opens names that may have a voice already.
+        if self.selected == name and name not in self.clips:
+            self._say("Describe their voice, then press Design.")
 
     def design(self):
         name = self.selected
@@ -1469,9 +1503,214 @@ class QwenVoicesScreen(Screen):
             self._say(f"Kept. {self.display(name)} speaks with it once the TTS starts.")
 
 
+class SpeakerRow:
+    """One character on the Recent screen: who they are, what they said last, and the
+    voice they speak with."""
+
+    # Their line is cut to this many characters, so it fits on two lines.
+    QUOTE_LENGTH = 80
+
+    def __init__(self, parent, screen, qwen):
+        self.screen = screen
+        self.line = None
+        self.frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.frame.grid_columnconfigure(0, weight=1)
+
+        heading = ctk.CTkFrame(self.frame, fg_color="transparent")
+        heading.grid(row=0, column=0, sticky="w")
+        self.name = ctk.CTkLabel(heading, text="", font=ctk.CTkFont(size=13, weight="bold"), anchor="w")
+        self.name.pack(side="left")
+        self.detail = ctk.CTkLabel(
+            heading, text="", font=ctk.CTkFont(size=11), text_color=("gray45", "gray60"), anchor="w",
+        )
+        self.detail.pack(side="left", padx=(10, 0))
+        self.quote = ctk.CTkLabel(
+            self.frame, text="", font=ctk.CTkFont(size=11), text_color=("gray45", "gray60"),
+            anchor="w", justify="left", wraplength=300,
+        )
+        self.quote.grid(row=1, column=0, sticky="w")
+
+        # Under Qwen3 a voice is designed on the Voices screen, not picked here.
+        self.voice = None
+        if not qwen:
+            self.voice = ctk.CTkOptionMenu(
+                self.frame, values=VOICE_CHOICES, width=200, command=lambda _: screen.pick(self),
+            )
+            self.voice.grid(row=0, column=1, rowspan=2, padx=(8, 0))
+        ctk.CTkButton(
+            self.frame, text="▶", width=32, command=lambda: screen.play(self),
+            fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+        ).grid(row=0, column=2, rowspan=2, padx=(8, 0))
+        if qwen:
+            ctk.CTkButton(
+                self.frame, text="Design", width=84, command=lambda: screen.design(self),
+                fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
+            ).grid(row=0, column=3, rowspan=2, padx=(8, 0))
+
+    def show(self, line):
+        self.line = line
+        self.name.configure(text=line.person)
+        self.detail.configure(text=self.screen.detail(line))
+        text = line.text
+        if len(text) > self.QUOTE_LENGTH:
+            text = text[:self.QUOTE_LENGTH].rsplit(" ", 1)[0] + "…"
+        self.quote.configure(text=f"“{text}”")
+        if self.voice is not None:
+            # The voice their next line gets: voices.json's, else the one picked for them,
+            # which is the same every time.
+            self.voice.set(voice_data.describe_voice(self.screen.voices.get(line.person.lower(), line.voice)))
+
+    def destroy(self):
+        self.frame.destroy()
+
+
+class RecentScreen(Screen):
+    """Who spoke lately, so a voice that doesn't suit someone can be changed while
+    they're still in the scene."""
+
+    title = "Recent Speakers"
+    SUBTITLES = {
+        "kokoro": "Who has spoken since the app opened, latest first. Pick another voice to\n"
+                  "change theirs from their next line. ▶ plays what they last said in it.",
+        "qwen3": "Who has spoken since the app opened, latest first. ▶ plays what they last\n"
+                 "said, and Design opens the Voices screen to give them a voice of their own.",
+    }
+    subtitle = SUBTITLES["kokoro"]
+    # race_of()'s ages, as a person rather than a body type.
+    RACE_LABELS = {"youth": "Child", "elder": "Elder"}
+    POLL_MS = 500
+
+    def __init__(self, parent, service):
+        super().__init__(parent, service)
+        # {lowercased name: SpeakerRow}, and their order on screen.
+        self.rows = {}
+        self.order = []
+        self.qwen = None
+        # The service's heard_count when the rows were last filled in.
+        self.shown_count = None
+        self.polling = None
+        # {lowercased name: voice} from voices.json, and the lowercased names with a
+        # Qwen3 voice of their own.
+        self.voices = {}
+        self.clips = set()
+
+        self.list = ctk.CTkScrollableFrame(self.body, fg_color=("gray92", "gray17"))
+        self.list.grid(row=0, column=0, columnspan=2, sticky="nsew")
+        self.body.grid_rowconfigure(0, weight=1)
+        self.body.grid_columnconfigure(0, weight=1)
+        self.empty = ctk.CTkLabel(
+            self.list, text="No one has spoken yet. Characters appear here as the game sends their lines.",
+            text_color=("gray45", "gray60"),
+        )
+        self.status = ctk.CTkLabel(self.body, text="", anchor="w", justify="left")
+        self.status.grid(row=1, column=0, columnspan=2, sticky="w", pady=(12, 0))
+
+    def on_show(self):
+        qwen = is_qwen(saved_engine())
+        if qwen != self.qwen:
+            # The rows have the other engine's buttons.
+            self.qwen = qwen
+            self.subtitle_label.configure(text=self.SUBTITLES["qwen3" if qwen else "kokoro"])
+            for row in self.rows.values():
+                row.destroy()
+            self.rows, self.order = {}, []
+            self.status.configure(text="")
+        self.load_voices()
+        # Another screen may have changed someone's voice: fill every row in again.
+        self.shown_count = None
+        self._stop_polling()
+        self.poll()
+
+    def on_hide(self):
+        self._stop_polling()
+
+    def _stop_polling(self):
+        if self.polling is not None:
+            self.after_cancel(self.polling)
+            self.polling = None
+
+    def load_voices(self):
+        try:
+            self.voices = voice_data.build_lookup(voice_data.load(VOICES_PATH))
+        except (OSError, ValueError):
+            self.voices = {}
+        self.clips = {name.lower() for name in qwen_engine.clip_names()}
+
+    def poll(self):
+        """Take in the lines the game sent since last looked, while this screen is up."""
+        if self.service.heard_count != self.shown_count:
+            self.shown_count = self.service.heard_count
+            self.show_lines(self.service.heard())
+        self.polling = self.after(self.POLL_MS, self.poll)
+
+    def show_lines(self, lines):
+        keys = [line.person.lower() for line in lines]
+        for key in set(self.rows) - set(keys):
+            self.rows.pop(key).destroy()
+        for key, line in zip(keys, lines):
+            if key not in self.rows:
+                self.rows[key] = SpeakerRow(self.list, self, self.qwen)
+            self.rows[key].show(line)
+        if keys != self.order:
+            # Moved rather than built again, so a voice menu open on one row stays open
+            # when someone else speaks.
+            for key in keys:
+                self.rows[key].frame.pack_forget()
+            for key in keys:
+                self.rows[key].frame.pack(fill="x", padx=8, pady=6)
+            self.order = keys
+        if keys:
+            self.empty.pack_forget()
+        else:
+            self.empty.pack(pady=24)
+
+    def detail(self, line):
+        """Their race, and where their voice comes from."""
+        key = line.person.lower()
+        if self.qwen and key in self.clips:
+            source = "own voice"
+        elif not self.qwen and key in self.voices:
+            source = "voice assigned"
+        elif line.race:
+            source = "voice picked by race"
+        else:
+            source = "voice picked by name"
+        race = self.RACE_LABELS.get(line.race) or " ".join(word.capitalize() for word in line.race.split())
+        return " · ".join(part for part in (race, source) if part)
+
+    def pick(self, row):
+        """Save the voice picked for a character in voices.json."""
+        voice = voice_data.voice_from_description(row.voice.get())
+        person = row.line.person
+        if self.voices.get(person.lower()) == voice:
+            return
+        try:
+            assign_voice(person, voice)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("Could not save voices.json", str(exc))
+            return
+        self.master.screens["Voices"].assigned(person, voice)
+        self.service.refresh_settings()
+        self.load_voices()
+        row.show(row.line)
+        when = "from their next line" if self.service.ready else "once the TTS starts"
+        self.status.configure(text=f"{person} speaks with {voice} {when}.")
+
+    def play(self, row):
+        # Under Kokoro in the voice on the row, picked or not; under Qwen3 in theirs.
+        if speech_ready(self.service):
+            voice = None if self.qwen else voice_data.voice_from_description(row.voice.get())
+            self.service.replay(row.line, voice)
+
+    def design(self, row):
+        self.master.show("Voices")
+        self.master.qwen_screens["Voices"].add_voice(row.line.person.lower())
+
+
 class SettingsApp(ctk.CTk):
     SCREENS = (
         ("Run", RunScreen),
+        ("Recent", RecentScreen),
         ("General", GeneralScreen),
         ("Tuning", VoiceTuningScreen),
         ("Name", NameScreen),
