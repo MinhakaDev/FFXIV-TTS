@@ -538,12 +538,12 @@
       "instruct": "A young adult woman with a warm, gentle, clear American voice. Kind and sincere, medium pitch, natural and calm delivery."
     },
     "default male": {
-      "instruct": "A young adult man with an energetic, expressive American voice. Confident and lively, medium pitch, clear diction.",
-      "seed": 1
+      "seed": 1,
+      "instruct": "A young adult man with an energetic, expressive American voice. Confident and lively, medium pitch, clear diction."
     },
     "hyur female 1": {
-      "seed": 1,
-      "instruct": "A young adult woman with a clear, friendly, natural American voice. Warm and down-to-earth, medium pitch, relaxed delivery."
+      "instruct": "A young adult woman with a low, friendly, natural American voice. Warm and down-to-earth, medium pitch, relaxed delivery.",
+      "seed": 845709239
     },
     "hyur female 2": {
       "seed": 1,
