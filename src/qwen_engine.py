@@ -94,6 +94,10 @@ REFERENCE_TEXT = (
     "The road ahead is long, and none of us can say what waits at its end. "
     "But whatever comes, we shall face it together, as we always have."
 )
+# The fastest speed speak() clones a clip at. The clone only partly follows a sped-up
+# clip (1.3 spoke at about 1.2, 1.6 at about 1.45), and faster than this the male
+# voices measured got no faster, then slower.
+MAX_SPEED = 1.6
 # Held back before playback starts: the first streamed chunks are one or two 80 ms
 # frames, and playing them as they come stutters while the stream gets going.
 PREBUFFER = SAMPLE_RATE * 4 // 10
@@ -417,9 +421,11 @@ class Model:
             setattr(params, name, value.encode("utf-8") if isinstance(value, str) else value)
         return params
 
-    def reference(self, wav_path):
-        """Extract the cloning latents from a clip. Freed by close()."""
-        samples = np.ascontiguousarray(read_wav(wav_path), dtype=np.float32)
+    def reference(self, wav_path, speed=1.0):
+        """Extract the cloning latents from a clip, sped up `speed` times: the clone
+        takes its pace from the clip. Freed by close()."""
+        samples = audio_output.stretch(read_wav(wav_path), speed, SAMPLE_RATE)
+        samples = np.ascontiguousarray(samples, dtype=np.float32)
         reference = VoiceRef()
         status = self.lib.qt_extract_voice_ref(
             self.ctx, samples.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), len(samples),
@@ -508,6 +514,7 @@ class QwenEngine:
         codec_path = model_path("qwen-tokenizer-12hz", cancelled)
         self.model = Model(model_path(f"qwen-talker-{size}-base", cancelled), codec_path)
         print(f"Loaded {len(self.clips)} Qwen3-TTS voices")
+        # {name: (speed, latents)}, for the speed last spoken at.
         self._latents = {}
 
     def close(self):
@@ -535,14 +542,22 @@ class QwenEngine:
                 return name
         return next(iter(self.clips))
 
-    def speak(self, text, voice, person, race, cancelled):
+    def speak(self, text, voice, person, race, speed, cancelled):
+        """The line's audio as it's synthesized, at about `speed` times the pace of the
+        voice's clip. The model has no speed of its own, but it speaks at the pace of the
+        clip it clones, so it clones one sped up. Stretching its output afterwards
+        instead sounded clearly worse. Only a clip with a transcript passes its pace on."""
         name = self.voice_name(person, voice, race)
+        speed = round(min(speed, MAX_SPEED), 2)
         # Read once: reload() on the UI thread can drop the entry between a check and
         # a second lookup, which lost the line to a KeyError.
-        reference = self._latents.get(name)
-        if reference is None:
+        cached = self._latents.get(name)
+        if cached is not None and cached[0] == speed:
+            reference = cached[1]
+        else:
             # Extracted on first use rather than at Start, which would load every clip.
-            reference = self._latents[name] = self.model.reference(self.clips[name][0])
+            reference = self.model.reference(self.clips[name][0], speed)
+            self._latents[name] = (speed, reference)
         transcript = self.clips[name][1]
         fields = {"ref_spk_emb": reference.ref_spk_emb, "ref_spk_dim": reference.ref_spk_dim}
         if transcript:

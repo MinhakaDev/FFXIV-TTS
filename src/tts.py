@@ -230,15 +230,16 @@ class TTSService:
 
     def replay(self, line=None, voice=None):
         """Speak a line from the game again: the last one, unless given one from heard().
-        With a voice, in that one, at its volume and speed. False if there's none yet or
-        the model hasn't loaded."""
+        With a voice, in that one. Either way at the volume and speed its voice has now.
+        False if there's none yet or the model hasn't loaded."""
         line = line or self.last_line
         if not self.ready or line is None:
             return False
-        if voice is not None:
-            volume, speed = self._playback_for(voice)
-            line = dataclasses.replace(line, voice=voice, volume=volume, speed=speed)
-        self._enqueue(line)
+        # Looked up again even in its own voice: a line heard under the other engine
+        # kept that engine's speed.
+        voice = voice or line.voice
+        volume, speed = self._playback_for(voice)
+        self._enqueue(dataclasses.replace(line, voice=voice, volume=volume, speed=speed))
         return True
 
     def heard(self):
@@ -299,7 +300,7 @@ class TTSService:
             if voice_data.classify_gender(voice) == "female"
             else self.male_volume,
         )
-        return volume, override.get("speed", self.speed)
+        return volume, override.get("speed", self.speed if self.qwen is None else self.qwen_speed)
 
     # -- worker ---------------------------------------------------------------
 
@@ -339,6 +340,9 @@ class TTSService:
         """The settings that can change while running, since they're only looked up
         per line."""
         self.speed = settings.get("speed", 1.0)
+        # Qwen3-TTS keeps its own: the engines' natural paces differ, so Kokoro's speed
+        # (1.3 by default) isn't the one for it.
+        self.qwen_speed = settings.get("qwen_speed", 1.0)
         self.male_volume = settings.get("malevolume", 0.7)
         self.female_volume = settings.get("femalevolume", 0.7)
         # Per-voice {voice_id: {"volume", "speed"}} overrides layered over the
@@ -374,8 +378,7 @@ class TTSService:
         if self.engine in QWEN_ENGINES:
             import qwen_engine
 
-            print(f"Using Qwen3-TTS {QWEN_ENGINES[self.engine].upper()} (test). It speaks at its own pace: "
-                  "the speed settings only apply to Kokoro.")
+            print(f"Using Qwen3-TTS {QWEN_ENGINES[self.engine].upper()} (test)")
             # Stop interrupts the first Start's download rather than waiting it out.
             self.qwen = qwen_engine.QwenEngine(QWEN_ENGINES[self.engine], lambda: self._stopping)
             self.synthesis_rate = qwen_engine.SAMPLE_RATE
@@ -440,7 +443,8 @@ class TTSService:
         from Qwen3-TTS, which streams."""
         if self.qwen is not None:
             return self.qwen.speak(
-                line.text, line.voice, line.person, line.race, lambda: self._superseded(line)
+                line.text, line.voice, line.person, line.race, line.speed,
+                lambda: self._superseded(line),
             )
         return (
             audio for _, _, audio in self.pipeline(

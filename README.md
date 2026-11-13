@@ -120,6 +120,9 @@ picked it.
   switches to it straight away.
 - **Region** gives Kokoro's voices an American (US) or British (UK) accent.
 - **Speech speed** and the **volume** sliders set how fast and how loud the voices are.
+  Kokoro and Qwen3 each keep their own speed, since they speak at different paces. Qwen3's
+  goes up to 1.6, and is only approximate: its voices speak a little slower than the number
+  says, and it varies a bit from line to line.
   **Preview** lets you hear them before you press Save.
 
 ### Voices: who speaks with which voice

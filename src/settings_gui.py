@@ -49,6 +49,8 @@ DEFAULT_SETTINGS = {
     "engine": "kokoro",
     "region": "US",
     "speed": 1.0,
+    # Qwen3-TTS's speed, kept apart from Kokoro's: they speak at different paces.
+    "qwen_speed": 1.0,
     "malevolume": 0.7,
     "femalevolume": 0.7,
     "audio_device": "auto",
@@ -583,7 +585,7 @@ class GeneralScreen(Screen):
                   "+ Runs well on the processor: no graphics card needed\n"
                   "+ Quick to start speaking, and leaves the graphics card to the game\n"
                   "+ Small download (about 330 MB)\n"
-                  "+ Speed setting, and names said exactly from IPA\n"
+                  "+ Names said exactly from IPA, and an exact speed setting\n"
                   "- Flatter, less expressive than Qwen3\n"
                   "- A few dozen stock voices, shared between characters",
         "Qwen3 0.6B": "Qwen3 0.6B: more natural voices, the lighter Qwen3\n\n"
@@ -593,17 +595,18 @@ class GeneralScreen(Screen):
                       "- Needs a graphics card to keep up: slow on the processor\n"
                       "- Rougher than 1.7B\n"
                       "- Downloads 1.3 GB, and uses graphics memory the game wants\n"
-                      "- No speed setting, and still a test",
+                      "- Speed only approximate, and still a test",
         "Qwen3 1.7B": "Qwen3 1.7B: the best voices, the heaviest\n\n"
                       "+ The most natural and expressive voices here\n"
                       "+ Every character can have a voice of their own\n"
                       "- Needs a graphics card, with more memory than 0.6B\n"
                       "- Slower than 0.6B to start each line\n"
                       "- Downloads 2.4 GB\n"
-                      "- No speed setting, and still a test",
+                      "- Speed only approximate, and still a test",
     }
-    # Kokoro's alone: the region picks its default voices and accent.
-    REGION_ROW, SPEED_ROW = 3, 4
+    # Kokoro's alone: the region picks its default voices and accent. Each engine has a
+    # speed of its own, and only the picked one's slider shows.
+    REGION_ROW, SPEED_ROW, QWEN_SPEED_ROW, QWEN_SPEED_HINT_ROW = 3, 4, 5, 6
 
     def __init__(self, parent, service):
         super().__init__(parent, service)
@@ -633,11 +636,17 @@ class GeneralScreen(Screen):
         self.region.grid(row=self.REGION_ROW, column=1, sticky="w")
 
         self.speed = self.slider(self.SPEED_ROW, "Speech speed", settings.get("speed", 1.0), 0.5, 2.0)
-        self.male_volume = self.slider(5, "Male volume", settings.get("malevolume", 0.7), 0.0, 2.0)
-        self.female_volume = self.slider(6, "Female volume", settings.get("femalevolume", 0.7), 0.0, 2.0)
+        self.qwen_speed = self.slider(
+            self.QWEN_SPEED_ROW, "Speech speed",
+            min(settings.get("qwen_speed", 1.0), qwen_engine.MAX_SPEED), 0.5, qwen_engine.MAX_SPEED,
+        )
+        # Qwen3 copies its pace from a sped-up voice clip, and only partly.
+        self.hint(self.QWEN_SPEED_HINT_ROW, "Approximate: Qwen3 speaks a little slower than this, and it varies a bit.")
+        self.male_volume = self.slider(7, "Male volume", settings.get("malevolume", 0.7), 0.0, 2.0)
+        self.female_volume = self.slider(8, "Female volume", settings.get("femalevolume", 0.7), 0.0, 2.0)
 
         buttons = ctk.CTkFrame(self.body, fg_color="transparent")
-        buttons.grid(row=7, column=0, columnspan=2, pady=(28, 0))
+        buttons.grid(row=9, column=0, columnspan=2, pady=(28, 0))
         ctk.CTkButton(
             buttons, text="Preview", command=self.preview, height=38, width=110,
             fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
@@ -675,6 +684,8 @@ class GeneralScreen(Screen):
         self.about.configure(text=self.ABOUT["qwen3" if qwen else "kokoro"])
         self.show_row(self.REGION_ROW, not qwen)
         self.show_row(self.SPEED_ROW, not qwen)
+        self.show_row(self.QWEN_SPEED_ROW, qwen)
+        self.show_row(self.QWEN_SPEED_HINT_ROW, qwen)
 
         status = []
         if qwen:
@@ -692,10 +703,11 @@ class GeneralScreen(Screen):
 
     def preview(self):
         # The sliders as they are, saved or not, with the region's default female voice.
+        speed = self.qwen_speed if is_qwen(self.picked()) else self.speed
         if speech_ready(self.service):
             self.service.say(
                 PREVIEW_LINE, tts.REGION_VOICES[self.region.get()][2],
-                volume=round(self.female_volume.get(), 2), speed=round(self.speed.get(), 2),
+                volume=round(self.female_volume.get(), 2), speed=round(speed.get(), 2),
             )
 
     def save(self):
@@ -704,6 +716,7 @@ class GeneralScreen(Screen):
         update_settings(
             region=region,
             speed=round(self.speed.get(), 2),
+            qwen_speed=round(self.qwen_speed.get(), 2),
             malevolume=round(self.male_volume.get(), 2),
             femalevolume=round(self.female_volume.get(), 2),
         )

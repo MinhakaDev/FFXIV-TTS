@@ -98,6 +98,105 @@ def resample_audio(audio, orig_sr, target_sr):
     return np.interp(target_indices, orig_indices, audio).astype(audio.dtype)
 
 
+class TimeStretch:
+    """Speeds speech up or slows it down without changing its pitch, fed whole or a
+    chunk at a time: for Qwen3-TTS's voice clips, whose pace the clone copies.
+    Resampling would raise the pitch along with the pace.
+
+    WSOLA: overlapping frames are taken from the input `speed` times further apart than
+    they're laid down, each moved a little to where its waveform lines up with the one
+    before, so the voice's pitch periods carry on across the joins instead of clicking.
+    """
+
+    def __init__(self, speed, sample_rate):
+        self.speed = speed
+        # 40 ms holds a few pitch periods of even a low voice.
+        self.frame = sample_rate // 25
+        self.hop = self.frame // 2
+        # How far a frame may move to line up: ±10 ms, a pitch period or more.
+        self.tolerance = self.frame // 4
+        self.window = np.hanning(self.frame + 1)[:-1].astype(np.float32)
+        # Positions below count from the start of the input with this padding in front,
+        # so the first frames can search before the start.
+        self._input = np.zeros(self.tolerance, dtype=np.float32)
+        self._start = 0  # where _input[0] is
+        self._received = 0
+        self._frames = 0
+        self._previous = None  # where the last frame was taken from
+        self._output = np.zeros(self.frame, dtype=np.float32)
+        self._weight = np.zeros(self.frame, dtype=np.float32)
+        self._emitted = 0
+
+    def feed(self, audio):
+        """The stretched audio this input completes, which may be none yet."""
+        audio = np.asarray(audio, dtype=np.float32)
+        self._input = np.concatenate((self._input, audio))
+        self._received += len(audio)
+        pieces = []
+        while self._ready():
+            pieces.append(self._step())
+        return np.concatenate(pieces) if pieces else np.zeros(0, dtype=np.float32)
+
+    def flush(self):
+        """The rest, once the input has ended: all of it comes to `speed` times shorter."""
+        target = round(self._received / self.speed)
+        pieces = []
+        while self._emitted < target:
+            if not self._ready():
+                self._input = np.concatenate((self._input, np.zeros(self.frame, dtype=np.float32)))
+                continue
+            pieces.append(self._step())
+        audio = np.concatenate(pieces) if pieces else np.zeros(0, dtype=np.float32)
+        return audio[:len(audio) - (self._emitted - target)]
+
+    def _nominal(self, frame):
+        return self.tolerance + round(frame * self.hop * self.speed)
+
+    def _slice(self, position, length):
+        return self._input[position - self._start:position - self._start + length]
+
+    def _ready(self):
+        end = self._nominal(self._frames) + self.tolerance + self.frame
+        if self._previous is not None:
+            end = max(end, self._previous + self.hop + self.frame)
+        return end <= self._start + len(self._input)
+
+    def _step(self):
+        """Lay down the next frame, returning the output it completes."""
+        nominal = self._nominal(self._frames)
+        if self._previous is None:
+            position = nominal
+        else:
+            # What followed the last frame in the input joins on to it seamlessly, so
+            # the frame near `nominal` most like that is the one taken.
+            follows = self._slice(self._previous + self.hop, self.frame)
+            search = self._slice(nominal - self.tolerance, self.frame + 2 * self.tolerance)
+            position = nominal - self.tolerance + int(np.argmax(np.correlate(search, follows, "valid")))
+        self._previous = position
+        self._frames += 1
+        self._output += self._slice(position, self.frame) * self.window
+        self._weight += self.window
+        done = self._output[:self.hop] / np.maximum(self._weight[:self.hop], 1e-3)
+        silence = np.zeros(self.hop, dtype=np.float32)
+        self._output = np.concatenate((self._output[self.hop:], silence))
+        self._weight = np.concatenate((self._weight[self.hop:], silence))
+        self._emitted += self.hop
+        # Drop the input no later frame reads.
+        keep = min(self._nominal(self._frames) - self.tolerance, position + self.hop)
+        if keep > self._start:
+            self._input = self._input[keep - self._start:]
+            self._start = keep
+        return done
+
+
+def stretch(audio, speed, sample_rate):
+    """Speech `speed` times faster, at the same pitch."""
+    if abs(speed - 1) < 0.01:
+        return audio
+    stretcher = TimeStretch(speed, sample_rate)
+    return np.concatenate((stretcher.feed(audio), stretcher.flush()))
+
+
 class LinePlayer:
     """Plays one line through a single output stream while it's still being synthesized.
 

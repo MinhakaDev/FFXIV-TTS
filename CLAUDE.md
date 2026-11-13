@@ -70,7 +70,9 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   `settings["voice_settings"]` override for the chosen voice where it has one; otherwise
   volume falls back to the per-*gender* default keyed on the voice's own gender
   (`voice_data.classify_gender(voice)`, where `voice_data` is `voices.py`) and speed to the
-  global `speed`, each key separately. The gender is the voice's,
+  global `speed`, each key separately. Under Qwen3 the overrides don't apply and speed is
+  `qwen_speed`, a setting of its own, so `replay()` looks both up again rather than keeping a
+  line's: one heard under the other engine had that engine's speed. The gender is the voice's,
   not the plugin's reported `Voice.Name` — that field is only the fallback for characters
   absent from `voices.json`. Comparing against `female_voice` instead was a real bug: it
   matched only the one regional default, so every other female voice played at the male volume.
@@ -99,7 +101,8 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   for a respelling instead of IPA under Qwen3, and the Run screen's Say box offers the
   default voices). Picking an engine on General saves it at once, without Save, and restarts
   a running TTS: saved only by Save, General showed one engine while Start loaded another.
-  Under Qwen3 it hides region and speed (`Screen.show_row()`). Each engine compares itself in
+  Under Qwen3 it hides region, and shows Qwen3's speed slider in place of Kokoro's
+  (`Screen.show_row()`). Each engine compares itself in
   a `Tooltip` on hover, reached through CTkSegmentedButton's private `_buttons_dict`: it has no
   public way to get at one segment, so check it when bumping customtkinter (unpinned). Saves call
   `TTSService.refresh_settings()`, so speed, volume, voices.json and the lexicons apply from
@@ -132,7 +135,8 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   workarounds live here: saved device names are matched with the `(hw:X,Y)` suffix stripped
   (those indices shift between boots and when a wireless headset sleeps), and
   `refresh_devices()` tears down and re-initialises PortAudio because it caches the device list
-  at init, hiding anything switched on after launch.
+  at init, hiding anything switched on after launch. `TimeStretch` (WSOLA) changes speech's
+  speed without its pitch; `stretch()` runs it over a whole clip.
 - **`qwen_engine.py`** — a second engine under test: Qwen3-TTS through qwentts.cpp's C library
   via ctypes, picked on the General screen (`settings["engine"]` `qwen3-0.6b`/`qwen3-1.7b`;
   anything else is Kokoro). Its first Start downloads what's missing into `qwen3-tts/`
@@ -153,7 +157,13 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   after Kokoro voices (`af_heart`...). A line with neither gets `GENDER_VOICES` (`default
   female` / `default male`) by its Kokoro voice's gender. The engine looks for the clips
   before downloading anything. It reads plain text, so
-  only the lexicons' `<alias>` entries apply, and it ignores the speed settings. `speak()` reads
+  only the lexicons' `<alias>` entries apply. The model has no speed of its own (nothing in
+  `qwen.h`), but the clone speaks at the pace of its clip, so `speak()` clones from the clip
+  sped up with `audio.stretch()`. Stretching the model's output instead was tried first and
+  sounded clearly worse: nothing played is stretched this way. The clone only partly follows
+  (1.3 speaks at about 1.2, 1.6 at about 1.45), and only with a transcript (the x-vector mode
+  takes no pace); above `MAX_SPEED` the male voices measured got no faster, then slower.
+  `_latents` keeps one speed per voice, extracted on first use. `speak()` reads
   `_latents` once: `reload()` runs on the UI thread and can drop an entry mid-lookup.
 - **`updates.py`** / **`version.py`** — update check against the GitHub Releases API. It only
   *detects* a newer release and links to the download page; it never replaces the binary. TLS
@@ -182,7 +192,7 @@ binary plus `lexicons/` without `Your-Name/lexicon.pls` (and `qwen3-voices/`), s
 never touches user state; build.sh/build.bat/CI copy `lexicons/` into `dist/` that way.
 
 - `settings/settings.json` — region (US/UK picks the Kokoro `lang_code` and default voices),
-  speed, per-gender volume, audio device, and `voice_settings` (per-voice overrides holding
+  speed (`speed` for Kokoro, `qwen_speed` for Qwen3), per-gender volume, audio device, and `voice_settings` (per-voice overrides holding
   `volume` and/or `speed`; whatever's missing falls back to the gender/global defaults).
 - `settings/voices.json` — `{expansion: {character: voice_id}}`, flattened to a lowercased
   lookup at runtime. `voices.py` still converts the legacy `{gender: {voice: [names]}}` layout.
