@@ -34,6 +34,9 @@ NAME_LEXICON_PATH = os.path.join(paths.lexicons_dir(), "Your-Name", "lexicon.pls
 # white-on-light and vanishes in Light mode.
 MUTED_TEXT = ("gray10", "gray90")
 
+# The Run screen's status dot: stopped or loading, waiting for the game, connected to it.
+STATE_COLORS = {"off": ("gray60", "gray45"), "waiting": "#d29922", "connected": "#3fb950"}
+
 # What Voice Tuning's Preview says: two sentences, so there's enough to judge the speed.
 PREVIEW_LINE = "Well met, adventurer. The Scions have need of you once more."
 
@@ -55,6 +58,8 @@ DEFAULT_SETTINGS = {
     "femalevolume": 0.7,
     "audio_device": "auto",
     "appearance": "Dark",
+    # Press Start by itself when the app opens: the Run screen's checkbox.
+    "auto_start": False,
     # {voice_id: {"volume": float, "speed": float}} - per-voice overrides layered over
     # the region/gender defaults above. Voices absent here fall back to those defaults.
     "voice_settings": {},
@@ -412,10 +417,15 @@ class RunScreen(Screen):
         ).grid(row=0, column=2, padx=(0, 8), pady=8)
         self.banner.grid_remove()
 
+        state = ctk.CTkFrame(self.body, fg_color="transparent")
+        state.grid(row=1, column=0, sticky="w")
+        # A shape rather than "●": a font without that character drew nothing.
+        self.dot = ctk.CTkFrame(state, width=12, height=12, corner_radius=6, fg_color=STATE_COLORS["off"])
+        self.dot.pack(side="left", padx=(0, 10))
         self.status = ctk.CTkLabel(
-            self.body, text="Stopped", font=ctk.CTkFont(size=15, weight="bold"), anchor="w"
+            state, text="Stopped", font=ctk.CTkFont(size=15, weight="bold"), anchor="w"
         )
-        self.status.grid(row=1, column=0, sticky="w")
+        self.status.pack(side="left")
 
         controls = ctk.CTkFrame(self.body, fg_color="transparent")
         controls.grid(row=1, column=1, sticky="e")
@@ -429,18 +439,27 @@ class RunScreen(Screen):
         )
         self.button.pack(side="left")
 
+        # Saved when ticked, like the engine: SettingsApp reads it as the app opens.
+        self.auto_start = ctk.CTkCheckBox(
+            self.body, text="Start when the app opens", font=ctk.CTkFont(size=12),
+            command=lambda: update_settings(auto_start=bool(self.auto_start.get())),
+        )
+        if load_settings().get("auto_start"):
+            self.auto_start.select()
+        self.auto_start.grid(row=2, column=1, sticky="e", pady=(10, 0))
+
         self.log = ctk.CTkTextbox(
             self.body, fg_color=("gray92", "gray14"), font=ctk.CTkFont(family="monospace", size=11),
             wrap="word",
         )
-        self.log.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(16, 0))
+        self.log.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(12, 0))
         self.log.configure(state="disabled")
-        self.body.grid_rowconfigure(2, weight=1)
+        self.body.grid_rowconfigure(3, weight=1)
         self.body.grid_columnconfigure(0, weight=1)
 
         # Speaks whatever is typed, through the same lexicons as the game's lines.
         say = ctk.CTkFrame(self.body, fg_color="transparent")
-        say.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        say.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         say.grid_columnconfigure(0, weight=1)
         self.say_text = ctk.CTkEntry(say, placeholder_text="Type something to hear it spoken")
         self.say_text.grid(row=0, column=0, sticky="ew")
@@ -453,8 +472,11 @@ class RunScreen(Screen):
             fg_color="transparent", border_width=1, text_color=MUTED_TEXT,
         ).grid(row=0, column=2)
 
-        self.append("Press Start to begin. The speech model loads on the first run,")
-        self.append("which can take a minute and needs an internet connection.")
+        if load_settings().get("auto_start"):
+            self.append("Starting by itself: \"Start when the app opens\" is ticked.")
+        else:
+            self.append("Press Start to begin. The speech model loads on the first run,")
+            self.append("which can take a minute and needs an internet connection.")
         self.drain()
 
         # Check GitHub for a newer build off the UI thread; check() no-ops on a dev build.
@@ -515,6 +537,7 @@ class RunScreen(Screen):
             # The worker may still be loading the model or finishing a line; it reports
             # back through show_state() once it has really exited.
             self.status.configure(text="Stopping...")
+            self.dot.configure(fg_color=STATE_COLORS["off"])
             self.button.configure(state="disabled")
             self.service.stop()
         else:
@@ -549,6 +572,7 @@ class RunScreen(Screen):
         """Reads the service rather than taking the state it notified: notifications
         queue up, and only the latest state matters."""
         service = self.service
+        dot = "off"
         if not service.running:
             if self.restart_pending:
                 self.restart_pending = False
@@ -558,10 +582,14 @@ class RunScreen(Screen):
             text = f"Stopped. Start loads {ENGINE_LABELS.get(saved_engine(), 'Kokoro')}."
         elif service.stopping:
             text = "Stopping..."
-        elif service.ready:
-            text = f"Running: {ENGINE_LABELS.get(service.engine, 'Kokoro')}"
-        else:
+        elif not service.ready:
             text = "Loading the speech model..."
+        else:
+            # Running doesn't mean anything is being spoken: that takes the game's plugin.
+            dot = "connected" if service.connected else "waiting"
+            where = "Connected to FFXIV" if service.connected else "Waiting for FFXIV..."
+            text = f"{where}  ·  {ENGINE_LABELS.get(service.engine, 'Kokoro')}"
+        self.dot.configure(fg_color=STATE_COLORS[dot])
         self.status.configure(text=text)
         self.button.configure(
             text="Stop" if service.running else "Start",
@@ -1800,6 +1828,10 @@ class SettingsApp(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.apply_engine()
         self.show(self.SCREENS[0][0])
+        if load_settings().get("auto_start"):
+            # Through after(): the service reports its state with after(0, ...), which
+            # raises before mainloop() runs.
+            self.after(0, self.service.start)
 
     def apply_engine(self):
         """Show the screens for the engine General has saved."""

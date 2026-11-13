@@ -73,7 +73,7 @@ Then double-click **`ffxiv-tts`** in the folder. If it doesn't open, right-click
 that folder).
 
 **Then press Start.** The first time, it downloads the voices, which takes a minute or two.
-When the window says **Connected to FFXIV. Waiting for dialogue...**, you're done: talk to
+When the dot at the top turns green and says **Connected to FFXIV**, you're done: talk to
 an NPC and listen.
 
 ---
@@ -89,6 +89,10 @@ The screen in the picture at the top of this page.
 
 - **Start** and **Stop** turn the voices on and off. The game can be open or closed when you
   press Start: the app keeps trying to connect until the game is there.
+- **The dot next to them** shows whether the app has reached the game: amber with
+  **Waiting for FFXIV...** until it does, green with **Connected to FFXIV** once it has. It
+  also says which speech engine is on.
+- **Start when the app opens** presses Start for you every time you open the app.
 - **Replay last line** says the last line of dialogue again.
 - **The box at the bottom** speaks whatever you type, so you can try out a voice.
 - **The text area** shows what the app is doing. Each line of dialogue appears there as
@@ -188,7 +192,7 @@ the update replaces it with the release's own voices.
 
 ## Something's not right?
 
-**The window says "Could not reach FFXIV".**
+**It stays on "Waiting for FFXIV...", or the window says "Could not reach FFXIV".**
 FFXIV TTS can't find TextToTalk. Check that:
 - the game was started with XIVLauncher,
 - TextToTalk is installed and turned on (type `/toggletts` in game to turn it on or off),

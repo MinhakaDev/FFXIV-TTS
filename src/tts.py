@@ -148,6 +148,9 @@ class TTSService:
         # True once the model has loaded, until the service stops: say() and replay()
         # need it.
         self.ready = False
+        # True while the game's TTS plugin is connected, so the Run screen can say so:
+        # "Running" alone didn't tell anyone why nothing was being spoken.
+        self.connected = False
         # The last line from the game, kept for replay() - including one skipped before
         # it was spoken.
         self.last_line = None
@@ -210,6 +213,11 @@ class TTSService:
     def _notify(self):
         if self._on_state_change:
             self._on_state_change(self.running)
+
+    def _set_connected(self, connected):
+        if connected != self.connected:
+            self.connected = connected
+            self._notify()
 
     # -- speaking -------------------------------------------------------------
 
@@ -331,6 +339,7 @@ class TTSService:
             print(f"TTS stopped: {exc}")
         finally:
             self.ready = False
+            self.connected = False
             if speaker is not None:
                 self.cancel()
                 self._requests.put(None)
@@ -502,9 +511,11 @@ class TTSService:
                 on_open=self._on_open,
                 on_message=self._on_message,
                 on_error=self._on_error,
-                on_close=lambda ws, code, msg: print("Connection closed"),
+                on_close=self._on_close,
             )
             self._ws.run_forever()
+            # Also when it never connected, which needn't call on_close.
+            self._set_connected(False)
             if self._stopping:
                 break
             print("Reconnecting in 5 seconds...")
@@ -520,6 +531,11 @@ class TTSService:
             ws.close()
             return
         print("Connected to FFXIV. Waiting for dialogue...")
+        self._set_connected(True)
+
+    def _on_close(self, ws, code, message):
+        print("Connection closed")
+        self._set_connected(False)
 
     def _on_error(self, ws, error):
         text = str(error)

@@ -51,7 +51,9 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   start/stop/reconnect. `stop()` only signals: `running` stays True until the worker has really
   exited (including joining its speaker thread), and that is what stops `start()` from running
   a second worker beside one still loading the model, speaking a line or waiting to reconnect —
-  don't clear it in `stop()`. Kokoro is imported *inside* `_load()`, not at module scope, so the
+  don't clear it in `stop()`. `connected` is True while the game's plugin is connected, and
+  each change notifies the GUI, whose Run screen shows it as a green or amber dot: "Running"
+  alone didn't say why nothing was spoken. Kokoro is imported *inside* `_load()`, not at module scope, so the
   window appears before torch's multi-second import. Loading it silences a few harmless warnings
   (`QUIET_WARNINGS`, Hugging Face's logger, Kokoro's default-`repo_id` one) that read as errors
   in the Run screen's log to players. The websocket thread only queues lines; a
@@ -88,7 +90,8 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   lines and the update-check result to `RunScreen` through queues that its `drain()` loop
   applies every 150 ms — a cross-thread `self.after()` raises if it lands before `mainloop()`
   runs. (`on_service_state` still uses `after(0, ...)`; the worker only exists once the loop
-  is running.) Each screen writes only its own keys via `update_settings(**changes)`, which
+  is running, which is why `settings["auto_start"]`, the Run screen's "Start when the app
+  opens", starts the service through `after(0, ...)` too.) Each screen writes only its own keys via `update_settings(**changes)`, which
   re-reads the file first so screens don't clobber each other. `DEFAULT_SETTINGS` is only the
   GUI's fallback for keys missing from the file: new installs get their actual defaults from
   the shipped `settings/settings.json` (speed 1.3, not 1.0), and `tts._load()` reads the file
@@ -175,7 +178,11 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   `audio.shift_pitch()` resamples, which moves the formants too. `prepare()` does all of it
   plus the speed, `Model.reference()` clones what it gives, and the Voices screen plays
   clips through it, so a voice sounds there as it will in game. The clone still drifts on
-  its own: one voice read one line at 121, 173 and 195 Hz.
+  its own: one voice read one line at 121, 173 and 195 Hz. `speak()` keeps the library's
+  sampling defaults (temperature 0.9). 0.7 was tried: it sounded steadier on a short
+  line, but flattened a long excited one (the pitch's rise and fall went from 4.3 to 3.0
+  semitones), which was heard as more like Siri, and didn't steady the drift either.
+  Streaming isn't a cost: decoded whole, a line differed from the streamed one by -42 dB.
   `_latents` keeps one speed per voice, extracted on first use. `speak()` reads
   `_latents` once: `reload()` runs on the UI thread and can drop an entry mid-lookup.
 - **`updates.py`** / **`version.py`** — update check against the GitHub Releases API. It only
