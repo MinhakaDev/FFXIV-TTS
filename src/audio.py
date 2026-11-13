@@ -189,6 +189,25 @@ class TimeStretch:
         return done
 
 
+def loudness(audio, sample_rate):
+    """Speech's level in dB below full scale: the mean power of its 20 ms frames within
+    40 dB of the loudest, so pauses don't count. None for silence."""
+    frame = sample_rate // 50
+    frames = audio[:len(audio) // frame * frame].reshape(-1, frame)
+    power = np.mean(frames.astype(np.float64) ** 2, axis=1)
+    if not len(power) or power.max() == 0:
+        return None
+    return 10 * np.log10(np.mean(power[power > power.max() * 1e-4]))
+
+
+def normalize(audio, sample_rate, target):
+    """Speech scaled to `target` dB, or as near as its peaks allow without clipping."""
+    level = loudness(audio, sample_rate)
+    if level is None:
+        return audio
+    return audio * min(10 ** ((target - level) / 20), 1 / np.abs(audio).max())
+
+
 def stretch(audio, speed, sample_rate):
     """Speech `speed` times faster, at the same pitch."""
     if abs(speed - 1) < 0.01:

@@ -206,7 +206,8 @@ below).
 
 **A name or word is said wrong.**
 For your own character, use the **Name** screen. For anyone else, the pronunciation lists are
-in the `lexicons` folder; see [lexicons/README.md](lexicons/README.md).
+in the `lexicons` folder; see [lexicons/README.md](lexicons/README.md). Qwen3 has its own
+list there, `Qwen3-Respellings`, with names spelled the way they sound.
 
 **Qwen3 is slow, or stops between sentences.**
 Qwen3 needs a graphics card. Without one, switch back to **Kokoro** on the General screen.

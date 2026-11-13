@@ -136,7 +136,8 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   (those indices shift between boots and when a wireless headset sleeps), and
   `refresh_devices()` tears down and re-initialises PortAudio because it caches the device list
   at init, hiding anything switched on after launch. `TimeStretch` (WSOLA) changes speech's
-  speed without its pitch; `stretch()` runs it over a whole clip.
+  speed without its pitch; `stretch()` runs it over a whole clip. `loudness()` measures
+  speech's level with pauses left out, and `normalize()` scales it to a target.
 - **`qwen_engine.py`** — a second engine under test: Qwen3-TTS through qwentts.cpp's C library
   via ctypes, picked on the General screen (`settings["engine"]` `qwen3-0.6b`/`qwen3-1.7b`;
   anything else is Kokoro). Its first Start downloads what's missing into `qwen3-tts/`
@@ -163,6 +164,9 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   sounded clearly worse: nothing played is stretched this way. The clone only partly follows
   (1.3 speaks at about 1.2, 1.6 at about 1.45), and only with a transcript (the x-vector mode
   takes no pace); above `MAX_SPEED` the male voices measured got no faster, then slower.
+  A clone speaks about as loud as its clip, too, and the clips ranged over 15 dB, so
+  `Model.reference()` also brings each to `LOUDNESS` (`audio.normalize()`, held below
+  clipping), which left 2-4 dB between voices; the Voices screen plays clips at that level.
   `_latents` keeps one speed per voice, extracted on first use. `speak()` reads
   `_latents` once: `reload()` runs on the UI thread and can drop an entry mid-lookup.
 - **`updates.py`** / **`version.py`** — update check against the GitHub Releases API. It only
@@ -200,16 +204,21 @@ never touches user state; build.sh/build.bat/CI copy `lexicons/` into `dist/` th
   [TextToTalk](https://github.com/karashiiro/TextToTalk/tree/main/lexicons). `<phoneme>` entries
   are pushed into `pipeline.g2p.lexicon.golds`; `<alias>` entries become plain word
   substitutions applied before synthesis, matched with punctuation stripped off the word's ends
-  ("Minhaka!"). The Name screen rewrites `Your-Name/lexicon.pls` wholesale, with one lexeme
+  ("Minhaka!") and then a possessive `'s` (`POSSESSIVES`). An alias matches one word only, so
+  a two-word grapheme ("Il Mheg") never matches as one. The Name screen rewrites `Your-Name/lexicon.pls` wholesale, with one lexeme
   holding both the IPA (`<phoneme>`, Kokoro) and a respelling (`<alias>`, Qwen3): `parse_pls()`
   gives a lexeme with both to each engine its own way, and no vendored lexeme has both. It's
   the user's file, so builds leave it out. `LEXICON_DIRECTORIES` is a **whitelist, not a
   directory scan** — `lexicons/` also holds packages (`Characters-Locations-Polly`,
   `Yugiri-Western-Pronunciation`) that deliberately contradict `Characters-Locations-System`,
   so they stay unlisted and inert. Merge order is the tuple's order and a later entry wins
-  collisions. Every file is currently byte-identical to upstream, so re-syncing is a plain
-  copy; `lexicons/README.md` documents each package and the Polly-specific notation that
-  misaki can't parse.
+  collisions. `Qwen3-Respellings` is ours, not TextToTalk's: respellings of 63 of
+  `Characters-Locations-System`'s names, for Qwen3, which can't read their IPA.
+  `QWEN_ONLY_LEXICONS` keeps Kokoro from loading it. It holds only the names Whisper heard
+  Qwen3 say better respelled; respelling one it already said right made it choppy, and how
+  to write a respelling is in `lexicons/README.md`. Every other vendored file is currently
+  byte-identical to upstream, so re-syncing is a plain copy; `lexicons/README.md` documents
+  each package and the Polly-specific notation that misaki can't parse.
 
 ### Packaging gotchas (`ffxiv-tts.spec`)
 

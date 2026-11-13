@@ -1405,6 +1405,9 @@ class QwenVoicesScreen(Screen):
         self.status.configure(text=text, text_color="#e04f4f" if error else ("gray30", "gray70"))
 
     def _play(self, samples):
+        # At the level the engine brings every clip to, so it sounds as loud as the
+        # character will.
+        samples = audio_output.normalize(samples, qwen_engine.SAMPLE_RATE, qwen_engine.LOUDNESS)
         try:
             audio_output.play_samples(samples, qwen_engine.SAMPLE_RATE, load_settings().get("audio_device", "auto"))
         except Exception as exc:

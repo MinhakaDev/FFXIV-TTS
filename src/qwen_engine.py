@@ -98,6 +98,10 @@ REFERENCE_TEXT = (
 # clip (1.3 spoke at about 1.2, 1.6 at about 1.45), and faster than this the male
 # voices measured got no faster, then slower.
 MAX_SPEED = 1.6
+# The level, in dB, each clip is brought to before it's cloned. A clone speaks about as
+# loud as its clip, and the clips ranged over 15 dB, so some characters were twice as
+# loud as others; brought to one level, their speech differed by 2 dB.
+LOUDNESS = -20.0
 # Held back before playback starts: the first streamed chunks are one or two 80 ms
 # frames, and playing them as they come stutters while the stream gets going.
 PREBUFFER = SAMPLE_RATE * 4 // 10
@@ -422,9 +426,11 @@ class Model:
         return params
 
     def reference(self, wav_path, speed=1.0):
-        """Extract the cloning latents from a clip, sped up `speed` times: the clone
-        takes its pace from the clip. Freed by close()."""
+        """Extract the cloning latents from a clip, sped up `speed` times and brought to
+        LOUDNESS: the clone takes its pace and its loudness from the clip. Freed by
+        close()."""
         samples = audio_output.stretch(read_wav(wav_path), speed, SAMPLE_RATE)
+        samples = audio_output.normalize(samples, SAMPLE_RATE, LOUDNESS)
         samples = np.ascontiguousarray(samples, dtype=np.float32)
         reference = VoiceRef()
         status = self.lib.qt_extract_voice_ref(

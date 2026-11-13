@@ -31,12 +31,16 @@ PLS_NAMESPACE = "{http://www.w3.org/2005/01/pronunciation-lexicon}"
 # _load() merges these in sequence, so a later entry wins any grapheme collision.
 LEXICON_DIRECTORIES = (
     "Characters-Locations-System",
+    "Qwen3-Respellings",
     "Your-Name",
     "Stutter-Replacers",
     "Chat-FFXIV-Acronyms",
     "Unconfirmed-Name-Pronunciations",
     "Americanize-pronunciations",
 )
+# Ours, not TextToTalk's: Characters-Locations-System's names spelled the way they sound,
+# for Qwen3-TTS, which can't read their IPA. Kokoro has the IPA, so it skips these.
+QWEN_ONLY_LEXICONS = {"Qwen3-Respellings"}
 REGION_VOICES = {
     "US": ("a", "am_puck", "af_heart"),
     "UK": ("b", "bm_fable", "bf_emma"),
@@ -57,6 +61,8 @@ QUIET_WARNINGS = (
 )
 # Stripped off a word before looking it up in the aliases, so "Minhaka," still matches.
 WORD_EDGES = string.punctuation + "“”‘’…"
+# Taken off a word whose alias didn't match, so "Alphinaud's" finds Alphinaud's.
+POSSESSIVES = ("'s", "’s")
 # How many characters the Recent screen remembers, latest first.
 HEARD_LIMIT = 40
 
@@ -116,12 +122,16 @@ def apply_aliases(text, aliases):
 def _alias(word, aliases):
     if word in aliases:
         return aliases[word]
-    # Dialogue puts punctuation against names ("Minhaka!"), which kept their alias
-    # from ever matching.
+    # Dialogue puts punctuation against names ("Minhaka!") and makes them possessive
+    # ("Minhaka's"), which kept their alias from ever matching.
     core = word.strip(WORD_EDGES)
-    if core and core in aliases:
+    stem = core
+    for suffix in POSSESSIVES:
+        if core.endswith(suffix) and core not in aliases:
+            stem = core[:-len(suffix)]
+    if stem and stem in aliases:
         start = word.index(core)
-        return word[:start] + aliases[core] + word[start + len(core):]
+        return word[:start] + aliases[stem] + word[start + len(stem):]
     return word
 
 
@@ -404,6 +414,8 @@ class TTSService:
         phonemes = self.pipeline.g2p.lexicon.golds if use_phonemes else {}
         aliases = {}
         for name in LEXICON_DIRECTORIES:
+            if use_phonemes and name in QWEN_ONLY_LEXICONS:
+                continue
             directory = os.path.join(paths.lexicons_dir(), name)
             for root, _, files in os.walk(directory):
                 for file in files:

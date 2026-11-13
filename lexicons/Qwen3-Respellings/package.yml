@@ -1,0 +1,6 @@
+name: Qwen3 Respellings
+author: FFXIV-TTS
+disabled: false
+description: Characters-Locations-System's names spelled the way they sound, for Qwen3-TTS, which reads plain text rather than IPA. Only loaded under Qwen3.
+files:
+  - lexicon.pls
