@@ -10,6 +10,7 @@ one line to the next.
 import ctypes
 import hashlib
 import json
+import math
 import os
 import queue
 import re
@@ -102,6 +103,22 @@ MAX_SPEED = 1.6
 # loud as its clip, and the clips ranged over 15 dB, so some characters were twice as
 # loud as others; brought to one level, their speech differed by 2 dB.
 LOUDNESS = -20.0
+# The highest pitch, in Hz, a clip may have for the pitch its description asks for
+# (described_pitch()); a clip above it is lowered to it before it's cloned, and the clone
+# follows. The VoiceDesign model made most women high whatever their description said:
+# "medium pitch" came out at 240 Hz and up, and 45 of the 175 voices were over their
+# ceiling. None: high on purpose. 215 is "default female" lowered 2 semitones, which
+# was liked over a new voice designed at 205 Hz.
+PITCH_CEILINGS = {
+    "very low": 165, "low": 180, "medium-low": 195, "medium": 215, "medium-high": 240, "high": None,
+}
+# The furthest a clip is lowered, in semitones: lowering moves the voice's formants too,
+# so a big shift sounds like a bigger person rather than the same one lower.
+MAX_PITCH_SHIFT = 4
+CHILD_WORDS = re.compile(r"\b(girl|boy|child|childlike|kid)\b", re.I)
+PITCH_WORDS = re.compile(r"\b(very low|medium-low|medium-high|medium|low|high)[\s-]+pitch", re.I)
+HIGH_WORDS = re.compile(r"\bhigh\b", re.I)
+LOW_WORDS = re.compile(r"\b(low|deep|husky)\b", re.I)
 # Held back before playback starts: the first streamed chunks are one or two 80 ms
 # frames, and playing them as they come stutters while the stream gets going.
 PREBUFFER = SAMPLE_RATE * 4 // 10
@@ -315,6 +332,34 @@ def _clip(name):
     return os.path.join(voices_dir(), f"{name}.wav"), text
 
 
+def described_pitch(description):
+    """The PITCH_CEILINGS key a voice's description asks for: a child's voice is high,
+    then whatever "... pitch" it names, else high or low if it says so, else medium."""
+    if CHILD_WORDS.search(description):
+        return "high"
+    named = PITCH_WORDS.search(description)
+    if named:
+        return named.group(1).lower()
+    if HIGH_WORDS.search(description):
+        return "high"
+    if LOW_WORDS.search(description):
+        return "low"
+    return "medium"
+
+
+def prepare(samples, description, speed=1.0):
+    """A clip as the clone takes it: at LOUDNESS, no higher than the pitch its
+    description asks for, and sped up `speed` times. The clone takes its loudness, pitch
+    and pace from the clip."""
+    samples = audio_output.normalize(samples, SAMPLE_RATE, LOUDNESS)
+    ceiling = PITCH_CEILINGS[described_pitch(description)]
+    current = audio_output.pitch(samples, SAMPLE_RATE)
+    if ceiling and current > ceiling:
+        lower = max(12 * math.log2(ceiling / current), -MAX_PITCH_SHIFT)
+        samples = audio_output.shift_pitch(samples, lower, SAMPLE_RATE)
+    return audio_output.stretch(samples, speed, SAMPLE_RATE)
+
+
 def designs_path():
     return os.path.join(voices_dir(), "designs.json")
 
@@ -425,12 +470,10 @@ class Model:
             setattr(params, name, value.encode("utf-8") if isinstance(value, str) else value)
         return params
 
-    def reference(self, wav_path, speed=1.0):
-        """Extract the cloning latents from a clip, sped up `speed` times and brought to
-        LOUDNESS: the clone takes its pace and its loudness from the clip. Freed by
-        close()."""
-        samples = audio_output.stretch(read_wav(wav_path), speed, SAMPLE_RATE)
-        samples = audio_output.normalize(samples, SAMPLE_RATE, LOUDNESS)
+    def reference(self, wav_path, description="", speed=1.0):
+        """Extract the cloning latents from a clip, prepare()d for its description and
+        `speed`. Freed by close()."""
+        samples = prepare(read_wav(wav_path), description, speed)
         samples = np.ascontiguousarray(samples, dtype=np.float32)
         reference = VoiceRef()
         status = self.lib.qt_extract_voice_ref(
@@ -520,6 +563,10 @@ class QwenEngine:
         codec_path = model_path("qwen-tokenizer-12hz", cancelled)
         self.model = Model(model_path(f"qwen-talker-{size}-base", cancelled), codec_path)
         print(f"Loaded {len(self.clips)} Qwen3-TTS voices")
+        # {name: description}, from designs.json: the pitch each clip is held to.
+        self.descriptions = {
+            name.lower(): design["instruct"] for name, design in load_designs()["voices"].items()
+        }
         # {name: (speed, latents)}, for the speed last spoken at.
         self._latents = {}
 
@@ -529,6 +576,7 @@ class QwenEngine:
     def reload(self, name):
         """Pick up a clip that was just made or replaced, from the next line on."""
         self.clips[name] = _clip(name)
+        self.descriptions[name] = load_designs()["voices"].get(name, {}).get("instruct", "")
         self._latents.pop(name, None)
 
     def voice_name(self, person, voice, race=""):
@@ -562,7 +610,7 @@ class QwenEngine:
             reference = cached[1]
         else:
             # Extracted on first use rather than at Start, which would load every clip.
-            reference = self.model.reference(self.clips[name][0], speed)
+            reference = self.model.reference(self.clips[name][0], self.descriptions.get(name, ""), speed)
             self._latents[name] = (speed, reference)
         transcript = self.clips[name][1]
         fields = {"ref_spk_emb": reference.ref_spk_emb, "ref_spk_dim": reference.ref_spk_dim}

@@ -216,6 +216,33 @@ def stretch(audio, speed, sample_rate):
     return np.concatenate((stretcher.feed(audio), stretcher.flush()))
 
 
+def pitch(audio, sample_rate):
+    """Speech's pitch in Hz: the median over its voiced 50 ms frames, each frame's period
+    the strongest peak of its autocorrelation between 70 and 500 Hz. 0 if none is voiced.
+    Agreed with YIN, which is built to avoid octave errors, within 2% on the Qwen3 clips."""
+    frame, hop = sample_rate // 20, sample_rate // 50
+    if len(audio) < frame:
+        return 0.0
+    frames = np.lib.stride_tricks.sliding_window_view(audio, frame)[::hop].astype(np.float64)
+    frames = frames - frames.mean(axis=1, keepdims=True)
+    frames = frames[np.sqrt(np.mean(frames ** 2, axis=1)) > 0.02]
+    if not len(frames):
+        return 0.0
+    autocorrelation = np.fft.irfft(np.abs(np.fft.rfft(frames, 2 * frame)) ** 2)[:, :frame]
+    shortest, longest = sample_rate // 500, sample_rate // 70
+    periods = shortest + np.argmax(autocorrelation[:, shortest:longest], axis=1)
+    voiced = autocorrelation[np.arange(len(frames)), periods] > 0.5 * autocorrelation[:, 0]
+    return float(np.median(sample_rate / periods[voiced])) if voiced.any() else 0.0
+
+
+def shift_pitch(audio, semitones, sample_rate):
+    """Speech `semitones` higher (lower if negative), as long as it was: stretched to the
+    length that resampling to the new pitch brings back."""
+    ratio = 2 ** (semitones / 12)
+    audio = stretch(audio, 1 / ratio, sample_rate)
+    return resample_audio(audio, sample_rate, round(sample_rate / ratio))
+
+
 class LinePlayer:
     """Plays one line through a single output stream while it's still being synthesized.
 

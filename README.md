@@ -138,7 +138,9 @@ picked from their name so they sound the same every time you meet them.
 With **Qwen3**, every character gets a voice of their own, made from a written description.
 Pick a name to see the description. To change their voice, edit the description, press
 **Design** to hear a new voice made from it, and press **Keep** when you like it.
-**Play current** plays the voice they have now. Anyone without a voice of their own gets one
+**Play current** plays the voice they have now. If a voice comes out higher than its
+description asks for, the app lowers it, so say the pitch you want: *medium pitch*, *low
+pitch*, and so on. Anyone without a voice of their own gets one
 of their race's voices, picked from their name so they sound the same every time you meet
 them. You'll find those under *Races*, with the voices for children and old people, and you
 can redesign them like any other. **Default female** and **Default male**, under *Defaults*,

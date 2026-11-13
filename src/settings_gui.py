@@ -1404,10 +1404,10 @@ class QwenVoicesScreen(Screen):
     def _say(self, text, error=False):
         self.status.configure(text=text, text_color="#e04f4f" if error else ("gray30", "gray70"))
 
-    def _play(self, samples):
-        # At the level the engine brings every clip to, so it sounds as loud as the
+    def _play(self, samples, description):
+        # As the engine prepares the clip, so it sounds as loud and as high as the
         # character will.
-        samples = audio_output.normalize(samples, qwen_engine.SAMPLE_RATE, qwen_engine.LOUDNESS)
+        samples = qwen_engine.prepare(samples, description)
         try:
             audio_output.play_samples(samples, qwen_engine.SAMPLE_RATE, load_settings().get("audio_device", "auto"))
         except Exception as exc:
@@ -1482,22 +1482,24 @@ class QwenVoicesScreen(Screen):
             self.candidate = result
             self._say(f"A new voice for {self.display(result['name'])}, made in {took:.1f} s. "
                       "Keep it, or press Design again for another one.")
-            self._play(result["samples"])
+            self._play(result["samples"], result["instruct"])
         if self.release_pending:
             self._release()
         self._update_buttons()
 
     def play_new(self):
         if self.candidate:
-            self._play(self.candidate["samples"])
+            self._play(self.candidate["samples"], self.candidate["instruct"])
 
     def play_current(self):
         """The voice the selected name speaks with now: their own, else the one picked by
         their name for when the game doesn't say their race."""
         for name in (self.selected, self._fallback(self.selected)):
             if name in self.clips:
-                self._play(qwen_engine.read_wav(
-                    os.path.join(qwen_engine.voices_dir(), f"{self.clips[name]}.wav")))
+                self._play(
+                    qwen_engine.read_wav(os.path.join(qwen_engine.voices_dir(), f"{self.clips[name]}.wav")),
+                    self.designs.get(name, {}).get("instruct", ""),
+                )
                 return
         self._say(f"{self.display(self.selected)} has no voice yet. Describe one and press Design.")
 

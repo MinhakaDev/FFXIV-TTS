@@ -137,7 +137,9 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   `refresh_devices()` tears down and re-initialises PortAudio because it caches the device list
   at init, hiding anything switched on after launch. `TimeStretch` (WSOLA) changes speech's
   speed without its pitch; `stretch()` runs it over a whole clip. `loudness()` measures
-  speech's level with pauses left out, and `normalize()` scales it to a target.
+  speech's level with pauses left out, and `normalize()` scales it to a target. `pitch()`
+  measures speech's pitch (agreeing with YIN within 2% on the Qwen3 clips), and
+  `shift_pitch()` moves it, keeping the length.
 - **`qwen_engine.py`** — a second engine under test: Qwen3-TTS through qwentts.cpp's C library
   via ctypes, picked on the General screen (`settings["engine"]` `qwen3-0.6b`/`qwen3-1.7b`;
   anything else is Kokoro). Its first Start downloads what's missing into `qwen3-tts/`
@@ -164,9 +166,16 @@ PyInstaller's `pathex=['src']` puts that directory on the path.
   sounded clearly worse: nothing played is stretched this way. The clone only partly follows
   (1.3 speaks at about 1.2, 1.6 at about 1.45), and only with a transcript (the x-vector mode
   takes no pace); above `MAX_SPEED` the male voices measured got no faster, then slower.
-  A clone speaks about as loud as its clip, too, and the clips ranged over 15 dB, so
-  `Model.reference()` also brings each to `LOUDNESS` (`audio.normalize()`, held below
-  clipping), which left 2-4 dB between voices; the Voices screen plays clips at that level.
+  A clone speaks about as loud and as high as its clip, too. The clips ranged over 15 dB,
+  so each is brought to `LOUDNESS` (`audio.normalize()`, held below clipping), which left
+  2-4 dB between voices. And the VoiceDesign model made most women high whatever their
+  description said ("medium pitch" came out at 240 Hz and up), so a clip above the
+  `PITCH_CEILINGS` entry for the pitch its description asks for (`described_pitch()`:
+  children are high on purpose) is lowered to it, at most `MAX_PITCH_SHIFT` semitones:
+  `audio.shift_pitch()` resamples, which moves the formants too. `prepare()` does all of it
+  plus the speed, `Model.reference()` clones what it gives, and the Voices screen plays
+  clips through it, so a voice sounds there as it will in game. The clone still drifts on
+  its own: one voice read one line at 121, 173 and 195 Hz.
   `_latents` keeps one speed per voice, extracted on first use. `speak()` reads
   `_latents` once: `reload()` runs on the UI thread and can drop an entry mid-lookup.
 - **`updates.py`** / **`version.py`** — update check against the GitHub Releases API. It only
